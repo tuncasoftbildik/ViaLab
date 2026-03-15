@@ -34,6 +34,7 @@
 | 3 | Kurumsal Etkinlik Platformu | MICE & Organizasyon | Next.js 15, Supabase, shadcn/ui |
 | 4 | EV Şarj İstasyonu Haritası | Enerji & Lokasyon | React, Leaflet, REST API |
 | 5 | Perakende Çözümleri Platformu | Perakende & Pazarlama | React, Tailwind CSS, Vite |
+| 6 | İş Mesajlaşma CRM Platformu | İletişim & Otomasyon | Python, FastAPI, React, Supabase |
 
 ## Teknoloji Yığını
 
