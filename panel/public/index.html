@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ViaGo Driver Panel</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.gridlayer.googlemutant@0.14.1/dist/Leaflet.GoogleMutant.js"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCscDJMy4GTEP_Mv-SBu3H7iadRBUzstvY"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
+
+    /* Layout */
+    .app { display: flex; height: 100vh; }
+    .sidebar { width: 360px; background: #fff; display: flex; flex-direction: column; border-right: 1px solid #e0e0e0; }
+    .main { flex: 1; display: flex; flex-direction: column; }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #E53935, #C62828);
+      padding: 16px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header-logo { display: flex; align-items: center; gap: 10px; }
+    .header-logo img { height: 28px; filter: brightness(0) invert(1); }
+    .header-logo span { color: #fff; font-size: 20px; font-weight: 800; }
+    .header-badge {
+      background: rgba(255,255,255,0.2);
+      color: #fff; font-size: 12px; font-weight: 600;
+      padding: 4px 12px; border-radius: 12px;
+    }
+    .header-stats { display: flex; gap: 16px; }
+    .stat { text-align: center; color: #fff; }
+    .stat-value { font-size: 22px; font-weight: 800; }
+    .stat-label { font-size: 11px; opacity: 0.8; }
+
+    /* Sidebar */
+    .sidebar-header {
+      padding: 16px; border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .sidebar-title { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+    .search-box {
+      margin: 12px 16px; padding: 10px 14px;
+      border: 1px solid #e0e0e0; border-radius: 10px;
+      font-size: 14px; outline: none; width: calc(100% - 32px);
+    }
+    .search-box:focus { border-color: #E53935; }
+
+    .driver-list { flex: 1; overflow-y: auto; }
+    .driver-item {
+      padding: 12px 16px; border-bottom: 1px solid #f5f5f5;
+      cursor: pointer; transition: background 0.2s;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .driver-item:hover { background: #f8f8f8; }
+    .driver-item.selected { background: #FFF3E0; border-left: 3px solid #E53935; }
+
+    .driver-avatar {
+      width: 40px; height: 40px; border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 14px;
+      flex-shrink: 0;
+    }
+    .driver-avatar.online { background: #43A047; }
+    .driver-avatar.offline { background: #9E9E9E; }
+
+    .driver-info { flex: 1; min-width: 0; }
+    .driver-name { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+    .driver-phone { font-size: 12px; color: #999; }
+    .driver-meta { display: flex; gap: 8px; margin-top: 4px; }
+    .driver-speed {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 10px; background: #E3F2FD; color: #1565C0;
+    }
+    .driver-status {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .driver-status.online { background: #E8F5E9; color: #2E7D32; }
+    .driver-status.offline { background: #f5f5f5; color: #999; }
+    .driver-time { font-size: 11px; color: #bbb; }
+
+    /* Map */
+    #map { flex: 1; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+    /* Notification Panel */
+    .notify-panel {
+      position: absolute; top: 80px; right: 20px;
+      width: 340px; background: #fff;
+      border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      z-index: 1000; display: none; overflow: hidden;
+    }
+    .notify-panel.active { display: block; }
+    .notify-header {
+      background: linear-gradient(135deg, #E53935, #C62828);
+      padding: 16px 20px; color: #fff;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .notify-header h3 { font-size: 16px; font-weight: 700; }
+    .notify-close {
+      background: none; border: none; color: #fff;
+      font-size: 24px; cursor: pointer;
+    }
+    .notify-body { padding: 20px; }
+    .notify-target {
+      margin-bottom: 16px;
+    }
+    .notify-target label { font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 6px; }
+    .notify-target select {
+      width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0;
+      border-radius: 10px; font-size: 14px; outline: none;
+    }
+    .notify-input {
+      width: 100%; padding: 10px 14px; border: 1px solid #e0e0e0;
+      border-radius: 10px; font-size: 14px; margin-bottom: 12px; outline: none;
+    }
+    .notify-input:focus, .notify-target select:focus { border-color: #E53935; }
+    .notify-textarea {
+      width: 100%; padding: 10px 14px; border: 1px solid #e0e0e0;
+      border-radius: 10px; font-size: 14px; margin-bottom: 12px;
+      height: 80px; resize: none; outline: none; font-family: inherit;
+    }
+    .notify-textarea:focus { border-color: #E53935; }
+    .notify-type { display: flex; gap: 8px; margin-bottom: 16px; }
+    .notify-type-btn {
+      flex: 1; padding: 8px; border: 2px solid #e0e0e0;
+      border-radius: 10px; text-align: center; cursor: pointer;
+      font-size: 12px; font-weight: 600; background: #fff;
+      transition: all 0.2s;
+    }
+    .notify-type-btn.active { border-color: #E53935; background: #FFF3E0; color: #E53935; }
+    .notify-type-btn:hover { border-color: #E53935; }
+    .notify-send {
+      width: 100%; padding: 12px; background: linear-gradient(135deg, #E53935, #C62828);
+      color: #fff; border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .notify-send:hover { opacity: 0.9; }
+
+    /* Floating Buttons */
+    .fab-container {
+      position: absolute; bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 12px; z-index: 999;
+    }
+    .fab {
+      width: 52px; height: 52px; border-radius: 26px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      transition: transform 0.2s;
+    }
+    .fab:hover { transform: scale(1.1); }
+    .fab-notify { background: linear-gradient(135deg, #E53935, #C62828); color: #fff; }
+    .fab-center { background: #fff; color: #333; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #333; color: #fff; padding: 12px 24px;
+      border-radius: 10px; font-size: 14px; z-index: 9999;
+      transition: transform 0.3s ease;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #43A047; }
+    .toast.error { background: #E53935; }
+
+    /* Driver detail popup on map */
+    .leaflet-popup-content { font-family: 'Inter', sans-serif; }
+    .popup-name { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+    .popup-phone { font-size: 13px; color: #666; margin-top: 2px; }
+    .popup-info { margin-top: 8px; display: flex; gap: 8px; }
+    .popup-chip {
+      font-size: 11px; font-weight: 600; padding: 3px 8px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="header">
+        <div class="header-logo">
+          <span>ViaGo</span>
+          <div class="header-badge">PANEL</div>
+        </div>
+      </div>
+      <div class="sidebar-header">
+        <span class="sidebar-title">Sürücüler <span id="driverCount" style="color:#E53935">(0)</span></span>
+        <span id="onlineCount" style="font-size:12px;color:#43A047;font-weight:600">0 Çevrimiçi</span>
+      </div>
+      <input type="text" class="search-box" placeholder="Sürücü ara..." id="searchInput" oninput="filterDrivers()">
+      <div class="driver-list" id="driverList"></div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+      <div style="position:relative;flex:1;overflow:hidden">
+        <div id="map"></div>
+
+        <!-- Stats Bar -->
+        <div style="position:absolute;top:12px;left:12px;z-index:999;display:flex;gap:8px">
+          <div style="background:#fff;padding:8px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="color:#43A047;font-size:18px">circle</span>
+            <span style="font-size:13px;font-weight:600" id="statOnline">0 Çevrimiçi</span>
+          </div>
+          <div style="background:#fff;padding:8px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);display:flex;align-items:center;gap:6px">
+            <span class="material-icons" style="color:#E53935;font-size:18px">speed</span>
+            <span style="font-size:13px;font-weight:600" id="statAvgSpeed">Ort. 0 km/s</span>
+          </div>
+        </div>
+
+        <!-- FAB Buttons -->
+        <div class="fab-container">
+          <button class="fab fab-notify" onclick="toggleNotifyPanel()" title="Bildirim Gönder">
+            <span class="material-icons">notifications</span>
+          </button>
+          <button class="fab fab-center" onclick="centerMap()" title="Haritayı Ortala">
+            <span class="material-icons">my_location</span>
+          </button>
+        </div>
+
+        <!-- Notification Panel -->
+        <div class="notify-panel" id="notifyPanel">
+          <div class="notify-header">
+            <h3>Bildirim Gönder</h3>
+            <button class="notify-close" onclick="toggleNotifyPanel()">&times;</button>
+          </div>
+          <div class="notify-body">
+            <div class="notify-target">
+              <label>Alıcı</label>
+              <select id="notifyTarget">
+                <option value="">Tüm Sürücülere</option>
+              </select>
+            </div>
+            <input type="text" class="notify-input" id="notifyTitle" placeholder="Başlık">
+            <textarea class="notify-textarea" id="notifyMessage" placeholder="Mesaj yazın..."></textarea>
+            <div class="notify-type">
+              <div class="notify-type-btn active" data-type="info" onclick="selectType(this)">
+                <span class="material-icons" style="font-size:16px">info</span><br>Bilgi
+              </div>
+              <div class="notify-type-btn" data-type="warning" onclick="selectType(this)">
+                <span class="material-icons" style="font-size:16px">warning</span><br>Uyarı
+              </div>
+              <div class="notify-type-btn" data-type="urgent" onclick="selectType(this)">
+                <span class="material-icons" style="font-size:16px">error</span><br>Acil
+              </div>
+            </div>
+            <button class="notify-send" onclick="sendNotification()">
+              <span class="material-icons" style="font-size:18px;vertical-align:middle">send</span>
+              Gönder
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // Harita
+    const map = L.map('map').setView([41.0082, 28.9784], 11); // İstanbul
+    L.gridLayer.googleMutant({
+      type: 'roadmap'
+    }).addTo(map);
+
+    // Socket.IO
+    const socket = io();
+    socket.emit('joinPanel');
+
+    // Sürücü verileri
+    const driverData = new Map();
+    const driverMarkers = new Map();
+    let selectedDriverId = null;
+    let notifyType = 'info';
+
+    // Sürücü ikonu
+    const createDriverIcon = (online, heading) => {
+      const color = online ? '#43A047' : '#9E9E9E';
+      return L.divIcon({
+        className: 'driver-marker',
+        html: `<div style="
+          width:36px;height:36px;border-radius:50%;
+          background:${color};border:3px solid #fff;
+          box-shadow:0 2px 8px rgba(0,0,0,0.3);
+          display:flex;align-items:center;justify-content:center;
+          color:#fff;font-size:18px;
+          transform:rotate(${heading || 0}deg)
+        "><span class="material-icons" style="font-size:20px">navigation</span></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+    };
+
+    // Tüm sürücüleri yükle
+    socket.on('allDrivers', (drivers) => {
+      drivers.forEach(d => updateDriver(d));
+      updateStats();
+      updateDriverList();
+    });
+
+    // Sürücü güncellemesi
+    socket.on('driverUpdate', (data) => {
+      updateDriver(data);
+      updateStats();
+      updateDriverList();
+    });
+
+    // Bildirim gönderildi
+    socket.on('notificationSent', (notif) => {
+      showToast(`Bildirim gönderildi: ${notif.title}`, 'success');
+    });
+
+    function updateDriver(data) {
+      driverData.set(data.driverId, data);
+
+      // Harita marker
+      if (driverMarkers.has(data.driverId)) {
+        const marker = driverMarkers.get(data.driverId);
+        marker.setLatLng([data.latitude, data.longitude]);
+        marker.setIcon(createDriverIcon(data.online, data.heading));
+      } else {
+        const marker = L.marker([data.latitude, data.longitude], {
+          icon: createDriverIcon(data.online, data.heading)
+        }).addTo(map);
+
+        marker.bindPopup('', {maxWidth: 300});
+        marker.on('click', async () => {
+          selectDriver(data.driverId);
+          const d = driverData.get(data.driverId);
+
+          // Önce temel bilgiyi göster
+          marker.setPopupContent(`
+            <div class="popup-name">${d.firstName} ${d.lastName}</div>
+            <div class="popup-phone">${d.phone}</div>
+            <div class="popup-info">
+              <span class="popup-chip" style="background:#E3F2FD;color:#1565C0">${Math.round(d.speed)} km/s</span>
+              <span class="popup-chip" style="background:${d.online ? '#E8F5E9;color:#2E7D32' : '#f5f5f5;color:#999'}">${d.online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
+            </div>
+            <div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;color:#999;font-size:12px">Yükleniyor...</div>
+          `);
+
+          // Sıradaki işi çek
+          try {
+            const res = await fetch('/api/driver-booking/' + encodeURIComponent(d.phone));
+            const booking = await res.json();
+
+            let bookingHtml = '';
+            if (booking.found) {
+              const pickupDate = new Date(new Date(booking.pickupTime).getTime() + 3 * 3600000);
+              const timeStr = pickupDate.getHours().toString().padStart(2,'0') + ':' + pickupDate.getMinutes().toString().padStart(2,'0');
+              const day = pickupDate.getDate().toString().padStart(2,'0');
+              const months = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+              const dateStr = day + ' ' + months[pickupDate.getMonth()];
+
+              const statusLabels = {NEW:'Yeni',ACCEPTED:'Kabul',DRIVER_ASSIGNED:'Atandı'};
+              const statusColors = {NEW:'#FF9800',ACCEPTED:'#1E88E5',DRIVER_ASSIGNED:'#43A047'};
+
+              bookingHtml = `
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-size:12px;font-weight:700;color:#333">Sıradaki Transfer</span>
+                    <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:${statusColors[booking.status] || '#999'};color:#fff">${statusLabels[booking.status] || booking.status}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+                    <span class="material-icons" style="font-size:14px;color:#E53935">schedule</span>
+                    <span style="font-size:13px;font-weight:600;color:#E53935">${dateStr} ${timeStr}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+                    <span class="material-icons" style="font-size:14px;color:#43A047">trip_origin</span>
+                    <span style="font-size:12px;color:#333">${booking.pickup}</span>
+                    ${booking.pickupType === 'AIRPORT' ? '<span class="material-icons" style="font-size:13px;color:#1E88E5">flight</span>' : ''}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+                    <span class="material-icons" style="font-size:14px;color:#E53935">place</span>
+                    <span style="font-size:12px;color:#333">${booking.dropoff}</span>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#f5f5f5;color:#666">${booking.passengerName}</span>
+                    <span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#f5f5f5;color:#666">${booking.passengerCount} kişi</span>
+                    ${booking.flightNumber ? `<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#E3F2FD;color:#1565C0">${booking.flightNumber}</span>` : ''}
+                    ${booking.meetAndGreet ? `<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#E8F5E9;color:#2E7D32">M&G</span>` : ''}
+                  </div>
+                </div>
+              `;
+            } else {
+              bookingHtml = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;color:#999;font-size:12px">Atanmış transfer yok</div>`;
+            }
+
+            marker.setPopupContent(`
+              <div class="popup-name">${d.firstName} ${d.lastName}</div>
+              <div class="popup-phone">${d.phone}</div>
+              <div class="popup-info">
+                <span class="popup-chip" style="background:#E3F2FD;color:#1565C0">${Math.round(d.speed)} km/s</span>
+                <span class="popup-chip" style="background:${d.online ? '#E8F5E9;color:#2E7D32' : '#f5f5f5;color:#999'}">${d.online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
+              </div>
+              ${bookingHtml}
+            `);
+            marker.openPopup();
+          } catch(e) {}
+        });
+
+        driverMarkers.set(data.driverId, marker);
+      }
+    }
+
+    function updateStats() {
+      const drivers = Array.from(driverData.values());
+      const online = drivers.filter(d => d.online).length;
+      const speeds = drivers.filter(d => d.online && d.speed > 0).map(d => d.speed);
+      const avgSpeed = speeds.length > 0 ? Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length) : 0;
+
+      document.getElementById('driverCount').textContent = `(${drivers.length})`;
+      document.getElementById('onlineCount').textContent = `${online} Çevrimiçi`;
+      document.getElementById('statOnline').textContent = `${online} Çevrimiçi`;
+      document.getElementById('statAvgSpeed').textContent = `Ort. ${avgSpeed} km/s`;
+
+      // Alıcı dropdown güncelle
+      updateNotifyTargets();
+    }
+
+    function updateDriverList() {
+      const list = document.getElementById('driverList');
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const drivers = Array.from(driverData.values())
+        .filter(d => {
+          const name = `${d.firstName} ${d.lastName}`.toLowerCase();
+          return name.includes(search) || d.phone.includes(search);
+        })
+        .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+
+      list.innerHTML = drivers.map(d => {
+        const initials = (d.firstName[0] || '') + (d.lastName[0] || '');
+        const ago = getTimeAgo(d.lastUpdate);
+        return `
+          <div class="driver-item ${selectedDriverId === d.driverId ? 'selected' : ''}"
+               onclick="focusDriver('${d.driverId}')">
+            <div class="driver-avatar ${d.online ? 'online' : 'offline'}">${initials}</div>
+            <div class="driver-info">
+              <div class="driver-name">${d.firstName} ${d.lastName}</div>
+              <div class="driver-phone">${d.phone}</div>
+              <div class="driver-meta">
+                <span class="driver-speed">${Math.round(d.speed)} km/s</span>
+                <span class="driver-status ${d.online ? 'online' : 'offline'}">${d.online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
+                <span class="driver-time">${ago}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function focusDriver(driverId) {
+      selectedDriverId = driverId;
+      const d = driverData.get(driverId);
+      if (d) {
+        map.setView([d.latitude, d.longitude], 15);
+        const marker = driverMarkers.get(driverId);
+        if (marker) marker.openPopup();
+      }
+      updateDriverList();
+    }
+
+    function selectDriver(driverId) {
+      selectedDriverId = driverId;
+      updateDriverList();
+      // Sidebar'da görünür yap
+      const item = document.querySelector(`.driver-item.selected`);
+      if (item) item.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+
+    function filterDrivers() {
+      updateDriverList();
+    }
+
+    function centerMap() {
+      const markers = Array.from(driverMarkers.values());
+      if (markers.length > 0) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.1));
+      } else {
+        map.setView([41.0082, 28.9784], 11);
+      }
+    }
+
+    // Bildirim
+    function toggleNotifyPanel() {
+      document.getElementById('notifyPanel').classList.toggle('active');
+    }
+
+    function selectType(el) {
+      document.querySelectorAll('.notify-type-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      notifyType = el.dataset.type;
+    }
+
+    function updateNotifyTargets() {
+      const select = document.getElementById('notifyTarget');
+      const current = select.value;
+      select.innerHTML = '<option value="">Tüm Sürücülere</option>';
+      Array.from(driverData.values()).forEach(d => {
+        select.innerHTML += `<option value="${d.driverId}">${d.firstName} ${d.lastName}</option>`;
+      });
+      select.value = current;
+    }
+
+    async function sendNotification() {
+      const title = document.getElementById('notifyTitle').value.trim();
+      const message = document.getElementById('notifyMessage').value.trim();
+      const target = document.getElementById('notifyTarget').value;
+
+      if (!title || !message) {
+        showToast('Başlık ve mesaj gerekli', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/notify', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            driverId: target || undefined,
+            title,
+            message,
+            type: notifyType,
+          }),
+        });
+        if (res.ok) {
+          showToast('Bildirim gönderildi!', 'success');
+          document.getElementById('notifyTitle').value = '';
+          document.getElementById('notifyMessage').value = '';
+          toggleNotifyPanel();
+        }
+      } catch (err) {
+        showToast('Bildirim gönderilemedi', 'error');
+      }
+    }
+
+    function getTimeAgo(timestamp) {
+      const diff = Date.now() - timestamp;
+      const seconds = Math.floor(diff / 1000);
+      if (seconds < 60) return `${seconds}sn`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}dk`;
+      const hours = Math.floor(minutes / 60);
+      return `${hours}sa`;
+    }
+
+    function showToast(msg, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.className = `toast ${type} show`;
+      setTimeout(() => toast.className = 'toast', 3000);
+    }
+
+    // Sayfa yüklenince sürücüleri çek
+    fetch('/api/drivers')
+      .then(r => r.json())
+      .then(drivers => {
+        drivers.forEach(d => updateDriver(d));
+        updateStats();
+        updateDriverList();
+      });
+
+    // Her 30 saniyede güncelle
+    setInterval(() => {
+      fetch('/api/drivers')
+        .then(r => r.json())
+        .then(drivers => {
+          drivers.forEach(d => updateDriver(d));
+          updateStats();
+          updateDriverList();
+        });
+    }, 30000);
+  </script>
+</body>
+</html>
