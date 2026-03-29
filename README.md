@@ -5,7 +5,7 @@
 <h1 align="center">ViaLab — Dijital Çözümler & Yazılım</h1>
 
 <p align="center">
-  Turizm, ulaşım, etkinlik, enerji ve perakende sektörlerine özel<br>
+  Turizm, ulaşım, etkinlik, eğitim ve mobil sektörlerine özel<br>
   modern, ölçeklenebilir yazılım çözümleri üretiyoruz.
 </p>
 
@@ -17,6 +17,8 @@
   <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
   <img src="https://img.shields.io/badge/Vite-BD34FE?style=flat-square&logo=vite&logoColor=white" alt="Vite">
   <img src="https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel">
+  <img src="https://img.shields.io/badge/React_Native-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React Native">
+  <img src="https://img.shields.io/badge/Swift-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift">
 </p>
 
 ---
@@ -32,9 +34,10 @@
 | 1 | Transfer Yönetim Sistemi | Ulaşım & Lojistik | React, Supabase, Google Maps, Leaflet |
 | 2 | Seyahat & Tur Platformu | Turizm & Rezervasyon | React, Supabase, Edge Functions |
 | 3 | Kurumsal Etkinlik Platformu | MICE & Organizasyon | Next.js 15, Supabase, shadcn/ui |
-| 4 | EV Şarj İstasyonu Haritası | Enerji & Lokasyon | React, Leaflet, REST API |
-| 5 | Perakende Çözümleri Platformu | Perakende & Pazarlama | React, Tailwind CSS, Vite |
-| 6 | İş Mesajlaşma CRM Platformu | İletişim & Otomasyon | Python, FastAPI, React, Supabase |
+| 4 | Booking.com Sürücü Uygulaması | Mobil & Ulaşım | React Native, Expo, Supabase, Google Maps |
+| 5 | StudyCoachAI - AI Çalışma Koçu | Eğitim & Yapay Zeka | Swift, React, Claude AI, Supabase |
+| 6 | ViaGo - Transfer Platformu | Kurumsal SaaS | React, Supabase, AWS, Google Maps |
+| 7 | iOS Uygulama Geliştirme | Mobil & iOS | Swift, React Native, Expo, Firebase |
 
 ## Teknoloji Yığını
 
@@ -51,8 +54,13 @@
 - **Deno Edge Functions** — Serverless API'ler
 - **Vercel** — Deployment & hosting
 
+### Mobil
+- **React Native / Expo** — Cross-platform mobil uygulama
+- **Swift** — Native iOS geliştirme
+- **Firebase** — Push Notification, Analytics
+
 ### Entegrasyonlar
-- Google Maps API, Leaflet, İyzico, UETDS, Resend, Web Push
+- Google Maps API, Leaflet, Booking.com API, İyzico, UETDS, Resend, Web Push
 
 ## Web Sitesi Özellikleri
 
