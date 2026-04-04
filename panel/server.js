@@ -398,10 +398,11 @@ app.post('/api/driver-email', async (req, res) => {
 // Sürücü email listesi (panel bildirim için)
 app.get('/api/driver-emails', async (req, res) => {
   try {
-    const result = await db.execute('SELECT phone, email FROM driver_passwords WHERE email IS NOT NULL AND email != ""');
+    const result = await db.execute('SELECT phone, email FROM driver_passwords WHERE email IS NOT NULL AND email != \'\'');
     res.json(result.rows);
   } catch (error) {
-    res.status(500).json({error: error.message});
+    // email kolonu yoksa boş dön
+    res.json([]);
   }
 });
 

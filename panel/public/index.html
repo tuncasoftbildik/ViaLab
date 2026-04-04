@@ -695,10 +695,10 @@
       const list=document.getElementById('bookingDriverList');
       list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>';
       try{
-        const [r,er]=await Promise.all([fetch('/api/booking-drivers'),fetch('/api/driver-emails')]);
+        const r=await fetch('/api/booking-drivers');
         const drivers=await r.json();
-        const emails=await er.json();
-        const emailMap=new Map(emails.map(e=>[e.phone,e.email]));
+        let emailMap=new Map();
+        try{const er=await fetch('/api/driver-emails');const emails=await er.json();if(Array.isArray(emails))emailMap=new Map(emails.map(e=>[e.phone,e.email]))}catch(e){}
         if(drivers.length===0){list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';return}
         list.innerHTML=drivers.map(d=>{
           const em=emailMap.get(d.telephone_number)||'';
