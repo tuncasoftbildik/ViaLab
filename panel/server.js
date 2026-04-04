@@ -4,6 +4,7 @@ const {Server} = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const {createClient} = require('@libsql/client');
 
 const app = express();
@@ -28,6 +29,15 @@ const OAUTH_TOKEN_URL = process.env.OAUTH_TOKEN_URL || 'https://auth.dispatchapi
 const CLIENT_ID = process.env.BOOKING_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.BOOKING_CLIENT_SECRET || '';
 
+// Gmail SMTP (Nodemailer)
+const mailTransporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER || 'info@viagotransfer.com',
+    pass: process.env.GMAIL_APP_PASSWORD || '',
+  },
+});
+
 let accessToken = null;
 let tokenExpiresAt = 0;
 
@@ -48,6 +58,77 @@ async function getToken() {
   accessToken = data.access_token;
   tokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000;
   return accessToken;
+}
+
+// Turso: email alanını ekle (yoksa)
+db.execute('ALTER TABLE driver_passwords ADD COLUMN email TEXT').catch(() => {});
+
+// Hoşgeldin maili gönder
+async function sendWelcomeEmail(email, firstName, lastName, phone) {
+  if (!email || !process.env.GMAIL_APP_PASSWORD) return;
+  try {
+    await mailTransporter.sendMail({
+      from: `"ViaGo Transfer" <${process.env.GMAIL_USER || 'info@viagotransfer.com'}>`,
+      to: email,
+      subject: 'ViaGo Driver - Hoş Geldiniz!',
+      html: `
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="max-width:520px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+  <div style="background:linear-gradient(135deg,#E53935,#C62828);padding:32px;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:24px;font-weight:800">ViaGo Driver</h1>
+    <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:14px">Booking.com Taxi Supplier</p>
+  </div>
+  <div style="padding:32px">
+    <h2 style="color:#1a1a2e;margin:0 0 16px;font-size:20px">Hoş Geldiniz, ${firstName} ${lastName}!</h2>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px">
+      ViaGo Driver uygulamasına kaydınız başarıyla tamamlandı. Aşağıdaki bilgilerinizle uygulamaya giriş yapabilirsiniz.
+    </p>
+    <div style="background:#f8f9fb;border-radius:12px;padding:20px;margin-bottom:24px">
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Telefon Numarası</div>
+        <div style="font-size:16px;font-weight:700;color:#1a1a2e">${phone}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Şifre</div>
+        <div style="font-size:16px;font-weight:700;color:#E53935">123456</div>
+      </div>
+    </div>
+    <div style="background:#FFF3E0;border-radius:8px;padding:12px 16px;margin-bottom:24px">
+      <p style="color:#E65100;font-size:12px;margin:0;font-weight:600">⚠️ Güvenliğiniz için giriş yaptıktan sonra şifrenizi değiştirmenizi öneriyoruz.</p>
+    </div>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0">
+      Uygulamayı App Store'dan indirip hemen kullanmaya başlayabilirsiniz. Herhangi bir sorunuz olursa bizimle iletişime geçmekten çekinmeyin.
+    </p>
+  </div>
+  <div style="background:#f8f9fb;padding:20px;text-align:center;border-top:1px solid #eee">
+    <p style="color:#999;font-size:12px;margin:0">© ${new Date().getFullYear()} ViaGo Transfer — info@viagotransfer.com</p>
+  </div>
+</div>
+</body></html>`,
+    });
+    console.log(`Hoşgeldin maili gönderildi: ${email}`);
+  } catch (error) {
+    console.log('Mail gönderme hatası:', error.message);
+  }
+}
+
+// Toplu/tekil mail gönder
+async function sendEmailToDriver(email, subject, htmlBody) {
+  if (!email || !process.env.GMAIL_APP_PASSWORD) return false;
+  try {
+    await mailTransporter.sendMail({
+      from: `"ViaGo Transfer" <${process.env.GMAIL_USER || 'info@viagotransfer.com'}>`,
+      to: email,
+      subject,
+      html: htmlBody,
+    });
+    return true;
+  } catch (error) {
+    console.log('Mail hatası:', error.message);
+    return false;
+  }
 }
 
 // Booking'leri çek ve sürücülere eşle
@@ -276,7 +357,7 @@ app.post('/api/login', async (req, res) => {
 
 // Şifre belirle/güncelle (panel kullanır)
 app.post('/api/driver-password', async (req, res) => {
-  const {phone, password} = req.body;
+  const {phone, password, email} = req.body;
   if (!phone || !password) {
     return res.status(400).json({error: 'Telefon ve şifre gerekli'});
   }
@@ -285,11 +366,86 @@ app.post('/api/driver-password', async (req, res) => {
   }
 
   try {
-    await db.execute({
-      sql: 'INSERT OR REPLACE INTO driver_passwords (phone, password_hash, created_at) VALUES (?, ?, ?)',
-      args: [phone, hashPassword(password), Date.now()],
-    });
+    if (email !== undefined) {
+      await db.execute({
+        sql: 'INSERT OR REPLACE INTO driver_passwords (phone, password_hash, created_at, email) VALUES (?, ?, ?, ?)',
+        args: [phone, hashPassword(password), Date.now(), email || null],
+      });
+    } else {
+      await db.execute({
+        sql: 'INSERT OR REPLACE INTO driver_passwords (phone, password_hash, created_at) VALUES (?, ?, ?)',
+        args: [phone, hashPassword(password), Date.now()],
+      });
+    }
     res.json({success: true});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Email güncelle
+app.post('/api/driver-email', async (req, res) => {
+  const {phone, email} = req.body;
+  if (!phone || !email) return res.status(400).json({error: 'Telefon ve email gerekli'});
+  try {
+    await db.execute({sql: 'UPDATE driver_passwords SET email = ? WHERE phone = ?', args: [email, phone]});
+    res.json({success: true});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Sürücü email listesi (panel bildirim için)
+app.get('/api/driver-emails', async (req, res) => {
+  try {
+    const result = await db.execute('SELECT phone, email FROM driver_passwords WHERE email IS NOT NULL AND email != ""');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Email bildirim gönder
+app.post('/api/send-email', async (req, res) => {
+  const {phone, subject, message} = req.body;
+  if (!subject || !message) return res.status(400).json({error: 'Konu ve mesaj gerekli'});
+
+  try {
+    let targets = [];
+    if (phone) {
+      // Tek sürücüye
+      const result = await db.execute({sql: 'SELECT phone, email FROM driver_passwords WHERE phone = ? AND email IS NOT NULL', args: [phone]});
+      targets = result.rows;
+    } else {
+      // Tüm sürücülere
+      const result = await db.execute('SELECT phone, email FROM driver_passwords WHERE email IS NOT NULL AND email != ""');
+      targets = result.rows;
+    }
+
+    if (targets.length === 0) return res.status(404).json({error: 'Email adresi bulunamadı'});
+
+    const htmlBody = `
+<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f7fa;font-family:-apple-system,sans-serif">
+<div style="max-width:520px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+  <div style="background:linear-gradient(135deg,#E53935,#C62828);padding:24px;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:20px;font-weight:800">ViaGo Driver</h1>
+  </div>
+  <div style="padding:28px">
+    <h2 style="color:#1a1a2e;margin:0 0 16px;font-size:18px">${subject}</h2>
+    <p style="color:#555;font-size:14px;line-height:1.7;margin:0;white-space:pre-line">${message}</p>
+  </div>
+  <div style="background:#f8f9fb;padding:16px;text-align:center;border-top:1px solid #eee">
+    <p style="color:#999;font-size:11px;margin:0">© ${new Date().getFullYear()} ViaGo Transfer — info@viagotransfer.com</p>
+  </div>
+</div></body></html>`;
+
+    let sent = 0;
+    for (const t of targets) {
+      if (await sendEmailToDriver(t.email, subject, htmlBody)) sent++;
+    }
+
+    res.json({success: true, sent, total: targets.length});
   } catch (error) {
     res.status(500).json({error: error.message});
   }
@@ -316,7 +472,7 @@ app.get('/api/booking-drivers', async (req, res) => {
 // Yeni sürücü oluştur
 app.post('/api/booking-drivers', async (req, res) => {
   try {
-    const {first_name, last_name, telephone_number} = req.body;
+    const {first_name, last_name, telephone_number, email} = req.body;
     if (!first_name || !last_name || !telephone_number) {
       return res.status(400).json({error: 'Ad, soyad ve telefon gerekli'});
     }
@@ -338,6 +494,14 @@ app.post('/api/booking-drivers', async (req, res) => {
 
     const data = await apiRes.json();
     if (apiRes.status === 201) {
+      // Email varsa Turso'ya kaydet ve hoşgeldin maili gönder
+      if (email) {
+        await db.execute({
+          sql: 'UPDATE driver_passwords SET email = ? WHERE phone = ?',
+          args: [email, telephone_number],
+        }).catch(() => {});
+        sendWelcomeEmail(email, first_name, last_name, telephone_number);
+      }
       res.status(201).json(data);
     } else if (apiRes.status === 409) {
       res.status(409).json({error: 'Bu telefon numarasıyla kayıtlı sürücü zaten var'});

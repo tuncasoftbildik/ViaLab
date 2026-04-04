@@ -427,6 +427,14 @@
                 <span class="material-icons" style="font-size:16px">error</span><br>Acil
               </div>
             </div>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text-secondary);cursor:pointer">
+                <input type="checkbox" id="notifyApp" checked> Uygulama
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text-secondary);cursor:pointer">
+                <input type="checkbox" id="notifyEmail"> Email
+              </label>
+            </div>
             <button class="btn btn-primary" onclick="sendNotification()">
               <span class="material-icons" style="font-size:18px">send</span> Gönder
             </button>
@@ -445,6 +453,7 @@
               <input type="text" class="input" id="driverLastName" placeholder="Soyad" style="flex:1">
             </div>
             <input type="text" class="input" id="driverPhone" placeholder="Telefon (+905...)" style="margin-bottom:8px">
+            <input type="email" class="input" id="driverEmail" placeholder="Email adresi (isteğe bağlı)" style="margin-bottom:8px">
             <input type="password" class="input" id="driverPassword" placeholder="Şifre (min 4 karakter)" style="margin-bottom:12px">
             <button class="btn btn-green" onclick="createDriver()">
               <span class="material-icons" style="font-size:18px">person_add</span> Sürücü Ekle
@@ -658,8 +667,22 @@
     function updateNotifyTargets() { const s=document.getElementById('notifyTarget'); const v=s.value; s.innerHTML='<option value="">Tüm Sürücülere</option>'; Array.from(driverData.values()).forEach(d=>{s.innerHTML+=`<option value="${d.driverId}">${d.firstName} ${d.lastName}</option>`}); s.value=v; }
     async function sendNotification() {
       const title=document.getElementById('notifyTitle').value.trim(), msg=document.getElementById('notifyMessage').value.trim(), target=document.getElementById('notifyTarget').value;
+      const sendApp=document.getElementById('notifyApp').checked, sendEmail=document.getElementById('notifyEmail').checked;
       if(!title||!msg){showToast('Başlık ve mesaj gerekli','error');return}
-      try{const r=await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({driverId:target||undefined,title,message:msg,type:notifyType})});if(r.ok){showToast('Bildirim gönderildi!','success');document.getElementById('notifyTitle').value='';document.getElementById('notifyMessage').value='';toggleNotifyPanel()}}catch(e){showToast('Bildirim gönderilemedi','error')}
+      if(!sendApp&&!sendEmail){showToast('En az bir kanal seçin','error');return}
+      try{
+        let appOk=true, emailOk=true;
+        if(sendApp){const r=await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({driverId:target||undefined,title,message:msg,type:notifyType})});appOk=r.ok}
+        if(sendEmail){
+          // target driverId ise phone'u bul
+          let phone='';
+          if(target){const d=Array.from(driverData.values()).find(x=>x.driverId===target);phone=d?d.phone:''}
+          const r=await fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone||undefined,subject:title,message:msg})});
+          const data=await r.json();
+          if(r.ok){showToast(`Email gönderildi (${data.sent}/${data.total})`,'success')}else{emailOk=false;showToast(data.error||'Email gönderilemedi','error')}
+        }
+        if(appOk&&(sendApp||emailOk)){document.getElementById('notifyTitle').value='';document.getElementById('notifyMessage').value='';toggleNotifyPanel();if(sendApp)showToast('Bildirim gönderildi!','success')}
+      }catch(e){showToast('Gönderim hatası','error')}
     }
 
     // ========== UTILS ==========
@@ -671,22 +694,34 @@
     async function loadBookingDrivers() {
       const list=document.getElementById('bookingDriverList');
       list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>';
-      try{const r=await fetch('/api/booking-drivers');const drivers=await r.json();
-      if(drivers.length===0){list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';return}
-      list.innerHTML=drivers.map(d=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F8FAFC"><div><div style="font-size:13px;font-weight:600;color:var(--text)">${d.first_name} ${d.last_name}</div><div style="font-size:11px;color:var(--text-secondary)">${d.telephone_number}</div></div><div style="display:flex;gap:6px"><button onclick="changePassword('${d.telephone_number}','${d.first_name} ${d.last_name}')" style="background:#EFF6FF;border:none;color:#2563EB;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px"><span class="material-icons" style="font-size:13px">key</span>Şifre</button><button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')" style="background:#FEF2F2;border:none;color:#DC2626;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px"><span class="material-icons" style="font-size:13px">delete</span>Sil</button></div></div>`).join('')}catch(e){list.innerHTML='<div style="color:var(--primary);font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>'}
+      try{
+        const [r,er]=await Promise.all([fetch('/api/booking-drivers'),fetch('/api/driver-emails')]);
+        const drivers=await r.json();
+        const emails=await er.json();
+        const emailMap=new Map(emails.map(e=>[e.phone,e.email]));
+        if(drivers.length===0){list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';return}
+        list.innerHTML=drivers.map(d=>{
+          const em=emailMap.get(d.telephone_number)||'';
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F8FAFC"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:600;color:var(--text)">${d.first_name} ${d.last_name}</div><div style="font-size:11px;color:var(--text-secondary)">${d.telephone_number}</div>${em?`<div style="font-size:10px;color:#2563EB;display:flex;align-items:center;gap:2px"><span class="material-icons" style="font-size:11px">email</span>${em}</div>`:''}</div><div style="display:flex;gap:4px;flex-shrink:0"><button onclick="setDriverEmail('${d.telephone_number}','${d.first_name} ${d.last_name}')" style="background:#F0FDF4;border:none;color:#16A34A;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:2px" title="Email"><span class="material-icons" style="font-size:13px">email</span></button><button onclick="changePassword('${d.telephone_number}','${d.first_name} ${d.last_name}')" style="background:#EFF6FF;border:none;color:#2563EB;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:2px"><span class="material-icons" style="font-size:13px">key</span></button><button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')" style="background:#FEF2F2;border:none;color:#DC2626;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:2px"><span class="material-icons" style="font-size:13px">delete</span></button></div></div>`}).join('')}catch(e){list.innerHTML='<div style="color:var(--primary);font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>'}
     }
     async function createDriver() {
-      const fn=document.getElementById('driverFirstName').value.trim(),ln=document.getElementById('driverLastName').value.trim(),ph=document.getElementById('driverPhone').value.trim(),pw=document.getElementById('driverPassword').value.trim();
+      const fn=document.getElementById('driverFirstName').value.trim(),ln=document.getElementById('driverLastName').value.trim(),ph=document.getElementById('driverPhone').value.trim(),em=document.getElementById('driverEmail').value.trim(),pw=document.getElementById('driverPassword').value.trim();
       if(!fn||!ln||!ph){showToast('Ad, soyad ve telefon gerekli','error');return}
       if(!pw||pw.length<4){showToast('Şifre en az 4 karakter olmalı','error');return}
-      try{const r=await fetch('/api/booking-drivers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({first_name:fn,last_name:ln,telephone_number:ph})});
-      if(r.status===201){await fetch('/api/driver-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph,password:pw})});showToast(`${fn} ${ln} eklendi!`,'success');['driverFirstName','driverLastName','driverPhone','driverPassword'].forEach(id=>document.getElementById(id).value='');loadBookingDrivers()}
+      try{const r=await fetch('/api/booking-drivers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({first_name:fn,last_name:ln,telephone_number:ph,email:em||undefined})});
+      if(r.status===201){await fetch('/api/driver-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph,password:pw,email:em||undefined})});showToast(`${fn} ${ln} eklendi!`,'success');['driverFirstName','driverLastName','driverPhone','driverEmail','driverPassword'].forEach(id=>document.getElementById(id).value='');loadBookingDrivers()}
       else if(r.status===409){showToast('Bu telefon numarası zaten kayıtlı','error')}else{const d=await r.json();showToast(d.error||'Eklenemedi','error')}}catch(e){showToast('Bağlantı hatası','error')}
     }
     async function changePassword(phone,name) {
       const pw=prompt(`${name} için yeni şifre girin (min 4 karakter):`);
       if(!pw||pw.length<4){if(pw!==null)showToast('Şifre en az 4 karakter olmalı','error');return}
       try{const r=await fetch('/api/driver-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password:pw})});if(r.ok)showToast(`${name} şifresi güncellendi`,'success');else showToast('Şifre güncellenemedi','error')}catch(e){showToast('Bağlantı hatası','error')}
+    }
+    async function setDriverEmail(phone,name) {
+      const em=prompt(`${name} için email adresi girin:`);
+      if(!em)return;
+      if(!em.includes('@')){showToast('Geçerli bir email girin','error');return}
+      try{const r=await fetch('/api/driver-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,email:em})});if(r.ok){showToast(`${name} email güncellendi`,'success');loadBookingDrivers()}else showToast('Güncellenemedi','error')}catch(e){showToast('Bağlantı hatası','error')}
     }
     async function deleteBookingDriver(id,name) {
       if(!confirm(`${name} silinsin mi?`))return;
