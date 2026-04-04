@@ -14,117 +14,168 @@
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCscDJMy4GTEP_Mv-SBu3H7iadRBUzstvY"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
+    :root {
+      --primary: #E53935; --primary-dark: #C62828;
+      --navy: #111827; --navy-light: #1F2937;
+      --green: #10B981; --green-dark: #059669;
+      --blue: #3B82F6; --orange: #F59E0B;
+      --surface: #ffffff; --bg: #F1F5F9;
+      --text: #0F172A; --text-secondary: #64748B;
+      --border: #E2E8F0;
+      --sidebar-w: 380px;
+      --radius: 12px; --radius-sm: 8px;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); height: 100vh; overflow: hidden; }
 
-    /* Layout */
+    /* ========== LAYOUT ========== */
     .app { display: flex; height: 100vh; }
-    .sidebar { width: 360px; background: #fff; display: flex; flex-direction: column; border-right: 1px solid #e0e0e0; }
-    .main { flex: 1; display: flex; flex-direction: column; }
+    .sidebar {
+      width: var(--sidebar-w); background: var(--surface);
+      display: flex; flex-direction: column;
+      border-right: 1px solid var(--border);
+      z-index: 500; position: relative;
+      transition: transform 0.3s ease;
+    }
+    .main { flex: 1; display: flex; flex-direction: column; position: relative; }
 
-    /* Header */
+    /* ========== HEADER ========== */
     .header {
-      background: linear-gradient(135deg, #E53935, #C62828);
-      padding: 16px 20px;
+      background: var(--navy);
+      padding: 14px 20px;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .header-logo { display: flex; align-items: center; gap: 10px; }
-    .header-logo img { height: 28px; filter: brightness(0) invert(1); }
-    .header-logo span { color: #fff; font-size: 20px; font-weight: 800; }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header-logo {
+      color: #fff; font-size: 22px; font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .header-logo em { font-style: normal; color: var(--primary); }
     .header-badge {
-      background: rgba(255,255,255,0.2);
-      color: #fff; font-size: 12px; font-weight: 600;
-      padding: 4px 12px; border-radius: 12px;
+      background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7);
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+      padding: 3px 10px; border-radius: 20px;
     }
-    .header-stats { display: flex; gap: 16px; }
-    .stat { text-align: center; color: #fff; }
-    .stat-value { font-size: 22px; font-weight: 800; }
-    .stat-label { font-size: 11px; opacity: 0.8; }
+    .mobile-menu-btn {
+      display: none; background: none; border: none;
+      color: #fff; font-size: 28px; cursor: pointer;
+    }
 
-    /* Sidebar */
-    .sidebar-header {
-      padding: 16px; border-bottom: 1px solid #f0f0f0;
-      display: flex; align-items: center; justify-content: space-between;
+    /* ========== STATS BAR (sidebar) ========== */
+    .stats-bar {
+      display: flex; gap: 6px; padding: 12px 16px;
+      border-bottom: 1px solid var(--border); background: var(--bg);
     }
-    .sidebar-title { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+    .stat-card {
+      flex: 1; padding: 8px 10px; border-radius: var(--radius-sm);
+      background: var(--surface); text-align: center;
+      border: 1px solid var(--border);
+    }
+    .stat-card .value { font-size: 18px; font-weight: 800; color: var(--text); }
+    .stat-card .label { font-size: 10px; color: var(--text-secondary); font-weight: 600; margin-top: 2px; }
+    .stat-card.highlight { border-color: var(--green); }
+    .stat-card.highlight .value { color: var(--green-dark); }
+
+    /* ========== SEARCH ========== */
+    .search-wrap {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+    }
     .search-box {
-      margin: 12px 16px; padding: 10px 14px;
-      border: 1px solid #e0e0e0; border-radius: 10px;
-      font-size: 14px; outline: none; width: calc(100% - 32px);
+      width: 100%; padding: 10px 14px 10px 38px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 13px; outline: none; background: var(--bg);
+      transition: border-color 0.2s;
     }
-    .search-box:focus { border-color: #E53935; }
+    .search-box:focus { border-color: var(--primary); background: var(--surface); }
+    .search-wrap { position: relative; }
+    .search-icon {
+      position: absolute; left: 28px; top: 50%; transform: translateY(-50%);
+      font-size: 18px; color: var(--text-secondary); pointer-events: none;
+    }
 
+    /* ========== DRIVER LIST ========== */
     .driver-list { flex: 1; overflow-y: auto; }
     .driver-item {
-      padding: 12px 16px; border-bottom: 1px solid #f5f5f5;
-      cursor: pointer; transition: background 0.2s;
+      padding: 12px 16px; border-bottom: 1px solid #F8FAFC;
+      cursor: pointer; transition: all 0.15s;
       display: flex; align-items: center; gap: 12px;
     }
-    .driver-item:hover { background: #f8f8f8; }
-    .driver-item.selected { background: #FFF3E0; border-left: 3px solid #E53935; }
-
+    .driver-item:hover { background: #F8FAFC; }
+    .driver-item.selected { background: #FEF3C7; border-left: 3px solid var(--orange); }
     .driver-avatar {
-      width: 40px; height: 40px; border-radius: 20px;
+      width: 42px; height: 42px; border-radius: 12px;
       display: flex; align-items: center; justify-content: center;
-      color: #fff; font-weight: 700; font-size: 14px;
-      flex-shrink: 0;
+      color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0;
+      position: relative;
     }
-    .driver-avatar.online { background: #43A047; }
-    .driver-avatar.offline { background: #9E9E9E; }
-
+    .driver-avatar.online { background: linear-gradient(135deg, var(--green), var(--green-dark)); }
+    .driver-avatar.offline { background: #94A3B8; }
+    .driver-avatar::after {
+      content: ''; position: absolute; bottom: -1px; right: -1px;
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid var(--surface);
+    }
+    .driver-avatar.online::after { background: var(--green); }
+    .driver-avatar.offline::after { background: #94A3B8; }
     .driver-info { flex: 1; min-width: 0; }
-    .driver-name { font-size: 14px; font-weight: 600; color: #1a1a2e; }
-    .driver-phone { font-size: 12px; color: #999; }
-    .driver-meta { display: flex; gap: 8px; margin-top: 4px; }
-    .driver-speed {
-      font-size: 11px; font-weight: 600; padding: 2px 8px;
-      border-radius: 10px; background: #E3F2FD; color: #1565C0;
+    .driver-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .driver-phone { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+    .driver-meta { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .chip {
+      font-size: 10px; font-weight: 600; padding: 2px 8px;
+      border-radius: 6px; display: inline-flex; align-items: center; gap: 3px;
     }
-    .driver-status {
-      font-size: 11px; font-weight: 600; padding: 2px 8px;
-      border-radius: 10px;
+    .chip-speed { background: #EFF6FF; color: #2563EB; }
+    .chip-online { background: #ECFDF5; color: #059669; }
+    .chip-offline { background: #F1F5F9; color: #94A3B8; }
+    .chip-time { color: #94A3B8; background: none; padding: 2px 0; }
+    .driver-actions {
+      display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
     }
-    .driver-status.online { background: #E8F5E9; color: #2E7D32; }
-    .driver-status.offline { background: #f5f5f5; color: #999; }
-    .driver-time { font-size: 11px; color: #bbb; }
+    .btn-icon {
+      width: 28px; height: 28px; border-radius: 8px; border: none;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.15s; background: var(--bg);
+      color: var(--text-secondary);
+    }
+    .btn-icon:hover { background: var(--border); color: var(--text); }
 
-    /* Driver History Panel */
+    /* ========== HISTORY PANEL ========== */
     .history-panel {
-      border-top: 2px solid #E53935;
-      background: #fafafa;
-      max-height: 0;
-      overflow: hidden;
+      border-top: 2px solid var(--primary);
+      background: var(--bg);
+      max-height: 0; overflow: hidden;
       transition: max-height 0.3s ease;
     }
     .history-panel.open { max-height: 50vh; overflow-y: auto; }
     .history-header {
-      padding: 12px 16px;
+      padding: 10px 16px;
       display: flex; justify-content: space-between; align-items: center;
-      background: #fff; position: sticky; top: 0; z-index: 1;
-      border-bottom: 1px solid #f0f0f0;
+      background: var(--surface); position: sticky; top: 0; z-index: 1;
+      border-bottom: 1px solid var(--border);
     }
-    .history-header h4 { font-size: 14px; font-weight: 700; color: #1a1a2e; margin: 0; }
+    .history-header h4 { font-size: 13px; font-weight: 700; color: var(--text); margin: 0; }
     .history-close {
       background: none; border: none; cursor: pointer;
-      font-size: 20px; color: #999; line-height: 1;
+      font-size: 20px; color: var(--text-secondary); line-height: 1;
     }
-    .history-close:hover { color: #E53935; }
+    .history-close:hover { color: var(--primary); }
     .history-item {
-      padding: 10px 16px; border-bottom: 1px solid #f0f0f0;
+      padding: 10px 16px; border-bottom: 1px solid #F8FAFC;
       display: flex; gap: 10px; align-items: flex-start;
     }
-    .history-item:hover { background: #f5f5f5; }
+    .history-item:hover { background: var(--surface); }
     .history-date {
-      min-width: 52px; text-align: center;
-      background: #fff; border-radius: 8px; padding: 4px 6px;
-      border: 1px solid #e0e0e0;
+      min-width: 50px; text-align: center;
+      background: var(--surface); border-radius: var(--radius-sm); padding: 4px 6px;
+      border: 1px solid var(--border);
     }
-    .history-date .day { font-size: 16px; font-weight: 800; color: #1a1a2e; line-height: 1.2; }
-    .history-date .month { font-size: 10px; color: #999; font-weight: 600; }
-    .history-date .time { font-size: 11px; color: #E53935; font-weight: 700; }
+    .history-date .day { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.2; }
+    .history-date .month { font-size: 10px; color: var(--text-secondary); font-weight: 600; }
+    .history-date .time { font-size: 11px; color: var(--primary); font-weight: 700; }
     .history-route { flex: 1; min-width: 0; }
     .history-route .from, .history-route .to {
-      font-size: 12px; color: #333; display: flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--text); display: flex; align-items: center; gap: 4px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .history-badge {
@@ -132,125 +183,175 @@
       border-radius: 6px; color: #fff; white-space: nowrap;
     }
 
-    /* Map */
+    /* ========== MAP ========== */
     #map { flex: 1; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
 
-    /* Notification Panel */
-    .notify-panel {
-      position: absolute; top: 80px; right: 20px;
-      width: 340px; background: #fff;
-      border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-      z-index: 1000; display: none; overflow: hidden;
+    /* ========== OVERLAY PANELS ========== */
+    .overlay-panel {
+      position: absolute; top: 12px; right: 12px;
+      width: 360px; max-width: calc(100vw - 24px);
+      background: var(--surface); border-radius: var(--radius);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12); z-index: 1000;
+      display: none; overflow: hidden;
     }
-    .notify-panel.active { display: block; }
-    .notify-header {
-      background: linear-gradient(135deg, #E53935, #C62828);
-      padding: 16px 20px; color: #fff;
+    .overlay-panel.active { display: block; }
+    .panel-header {
+      padding: 14px 18px; color: #fff;
       display: flex; justify-content: space-between; align-items: center;
     }
-    .notify-header h3 { font-size: 16px; font-weight: 700; }
-    .notify-close {
-      background: none; border: none; color: #fff;
-      font-size: 24px; cursor: pointer;
+    .panel-header h3 { font-size: 15px; font-weight: 700; }
+    .panel-close {
+      background: rgba(255,255,255,0.15); border: none; color: #fff;
+      width: 28px; height: 28px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 18px; transition: background 0.15s;
     }
-    .notify-body { padding: 20px; }
-    .notify-target {
-      margin-bottom: 16px;
-    }
-    .notify-target label { font-size: 13px; font-weight: 600; color: #666; display: block; margin-bottom: 6px; }
-    .notify-target select {
-      width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0;
-      border-radius: 10px; font-size: 14px; outline: none;
-    }
-    .notify-input {
-      width: 100%; padding: 10px 14px; border: 1px solid #e0e0e0;
-      border-radius: 10px; font-size: 14px; margin-bottom: 12px; outline: none;
-    }
-    .notify-input:focus, .notify-target select:focus { border-color: #E53935; }
-    .notify-textarea {
-      width: 100%; padding: 10px 14px; border: 1px solid #e0e0e0;
-      border-radius: 10px; font-size: 14px; margin-bottom: 12px;
-      height: 80px; resize: none; outline: none; font-family: inherit;
-    }
-    .notify-textarea:focus { border-color: #E53935; }
-    .notify-type { display: flex; gap: 8px; margin-bottom: 16px; }
-    .notify-type-btn {
-      flex: 1; padding: 8px; border: 2px solid #e0e0e0;
-      border-radius: 10px; text-align: center; cursor: pointer;
-      font-size: 12px; font-weight: 600; background: #fff;
-      transition: all 0.2s;
-    }
-    .notify-type-btn.active { border-color: #E53935; background: #FFF3E0; color: #E53935; }
-    .notify-type-btn:hover { border-color: #E53935; }
-    .notify-send {
-      width: 100%; padding: 12px; background: linear-gradient(135deg, #E53935, #C62828);
-      color: #fff; border: none; border-radius: 10px;
-      font-size: 15px; font-weight: 700; cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    .notify-send:hover { opacity: 0.9; }
+    .panel-close:hover { background: rgba(255,255,255,0.3); }
+    .panel-body { padding: 16px 18px; }
 
-    /* Floating Buttons */
+    /* Input style */
+    .input {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); font-size: 13px; outline: none;
+      transition: border-color 0.2s; background: var(--bg);
+      font-family: inherit;
+    }
+    .input:focus { border-color: var(--primary); background: var(--surface); }
+    .btn {
+      width: 100%; padding: 11px; border: none; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 700; cursor: pointer; color: #fff;
+      transition: opacity 0.2s; display: flex; align-items: center;
+      justify-content: center; gap: 6px; font-family: inherit;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
+    .btn-green { background: linear-gradient(135deg, var(--green), var(--green-dark)); }
+    .btn-navy { background: linear-gradient(135deg, var(--navy), var(--navy-light)); }
+
+    /* ========== MAP STATS PILLS ========== */
+    .map-stats {
+      position: absolute; top: 12px; left: 12px; z-index: 999;
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .map-pill {
+      background: var(--surface); padding: 8px 14px; border-radius: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; color: var(--text);
+      backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.8);
+    }
+
+    /* ========== FAB ========== */
     .fab-container {
-      position: absolute; bottom: 24px; right: 24px;
-      display: flex; flex-direction: column; gap: 12px; z-index: 999;
+      position: absolute; bottom: 20px; right: 16px;
+      display: flex; flex-direction: column; gap: 10px; z-index: 999;
     }
     .fab {
-      width: 52px; height: 52px; border-radius: 26px;
+      width: 48px; height: 48px; border-radius: 14px;
       display: flex; align-items: center; justify-content: center;
-      border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      transition: transform 0.2s;
+      border: none; cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      transition: transform 0.15s, box-shadow 0.15s;
     }
-    .fab:hover { transform: scale(1.1); }
-    .fab-drivers { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; }
-    .fab-notify { background: linear-gradient(135deg, #E53935, #C62828); color: #fff; }
+    .fab:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+    .fab .material-icons { font-size: 22px; }
+    .fab-drivers { background: var(--navy); color: #fff; }
     .fab-heat { background: linear-gradient(135deg, #FF6F00, #E65100); color: #fff; }
-    .fab-center { background: #fff; color: #333; }
+    .fab-notify { background: var(--primary); color: #fff; }
+    .fab-center { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 
-    /* Toast */
+    /* ========== TOAST ========== */
     .toast {
       position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%) translateY(100px);
-      background: #333; color: #fff; padding: 12px 24px;
-      border-radius: 10px; font-size: 14px; z-index: 9999;
-      transition: transform 0.3s ease;
+      background: var(--text); color: #fff; padding: 12px 24px;
+      border-radius: var(--radius); font-size: 13px; font-weight: 500;
+      z-index: 9999; transition: transform 0.3s ease;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
     }
     .toast.show { transform: translateX(-50%) translateY(0); }
-    .toast.success { background: #43A047; }
-    .toast.error { background: #E53935; }
+    .toast.success { background: var(--green-dark); }
+    .toast.error { background: var(--primary-dark); }
 
-    /* Driver detail popup on map */
+    /* ========== MAP POPUP ========== */
     .leaflet-popup-content { font-family: 'Inter', sans-serif; }
-    .popup-name { font-size: 15px; font-weight: 700; color: #1a1a2e; }
-    .popup-phone { font-size: 13px; color: #666; margin-top: 2px; }
-    .popup-info { margin-top: 8px; display: flex; gap: 8px; }
-    .popup-chip {
-      font-size: 11px; font-weight: 600; padding: 3px 8px;
-      border-radius: 8px;
+    .popup-name { font-size: 14px; font-weight: 700; color: var(--text); }
+    .popup-phone { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .popup-info { margin-top: 8px; display: flex; gap: 6px; }
+    .popup-chip { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 768px) {
+      :root { --sidebar-w: 100vw; }
+      .sidebar {
+        position: fixed; top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        transform: translateX(-100%);
+        z-index: 2000;
+      }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-menu-btn { display: block; }
+      .map-stats { left: 8px; top: 8px; }
+      .map-pill { font-size: 11px; padding: 6px 10px; }
+      .fab-container { bottom: 16px; right: 12px; }
+      .fab { width: 44px; height: 44px; border-radius: 12px; }
+      .fab .material-icons { font-size: 20px; }
+      .overlay-panel { top: 8px; right: 8px; width: calc(100vw - 16px); }
     }
+
+    /* Notify specific */
+    .notify-type { display: flex; gap: 8px; margin-bottom: 14px; }
+    .notify-type-btn {
+      flex: 1; padding: 8px; border: 2px solid var(--border);
+      border-radius: var(--radius-sm); text-align: center; cursor: pointer;
+      font-size: 11px; font-weight: 600; background: var(--surface);
+      transition: all 0.15s; color: var(--text-secondary);
+    }
+    .notify-type-btn.active { border-color: var(--primary); background: #FEF2F2; color: var(--primary); }
+    .notify-type-btn:hover { border-color: var(--primary); }
   </style>
 </head>
 <body>
   <div class="app">
     <!-- Sidebar -->
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
       <div class="header">
-        <div class="header-logo">
-          <span>ViaGo</span>
+        <div class="header-left">
+          <div class="header-logo">Via<em>Go</em></div>
           <div class="header-badge">PANEL</div>
         </div>
+        <button class="mobile-menu-btn" onclick="toggleSidebar()">
+          <span class="material-icons">close</span>
+        </button>
       </div>
-      <div class="sidebar-header">
-        <span class="sidebar-title">Sürücüler <span id="driverCount" style="color:#E53935">(0)</span></span>
-        <span id="onlineCount" style="font-size:12px;color:#43A047;font-weight:600">0 Çevrimiçi</span>
+
+      <div class="stats-bar">
+        <div class="stat-card highlight">
+          <div class="value" id="statOnlineNum">0</div>
+          <div class="label">Çevrimiçi</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="statTotalNum">0</div>
+          <div class="label">Toplam</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="statAvgSpd">0</div>
+          <div class="label">Ort. km/s</div>
+        </div>
       </div>
-      <input type="text" class="search-box" placeholder="Sürücü ara..." id="searchInput" oninput="filterDrivers()">
+
+      <div class="search-wrap">
+        <span class="material-icons search-icon">search</span>
+        <input type="text" class="search-box" placeholder="Sürücü ara..." id="searchInput" oninput="filterDrivers()">
+      </div>
+
       <div class="driver-list" id="driverList"></div>
+
       <div class="history-panel" id="historyPanel">
         <div class="history-header">
           <h4 id="historyTitle">Sürücü Geçmişi</h4>
           <div style="display:flex;align-items:center;gap:8px">
-            <select id="historyDays" onchange="reloadHistory()" style="font-size:11px;padding:4px 8px;border:1px solid #e0e0e0;border-radius:6px;background:#fff;font-weight:600;color:#333">
+            <select id="historyDays" onchange="reloadHistory()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-weight:600;color:var(--text)">
               <option value="1">Bugün</option>
               <option value="3">3 Gün</option>
               <option value="7">7 Gün</option>
@@ -263,24 +364,28 @@
       </div>
     </div>
 
-    <!-- Main Content -->
+    <!-- Main -->
     <div class="main">
       <div style="position:relative;flex:1;overflow:hidden">
         <div id="map"></div>
 
-        <!-- Stats Bar -->
-        <div style="position:absolute;top:12px;left:12px;z-index:999;display:flex;gap:8px">
-          <div style="background:#fff;padding:8px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);display:flex;align-items:center;gap:6px">
-            <span class="material-icons" style="color:#43A047;font-size:18px">circle</span>
-            <span style="font-size:13px;font-weight:600" id="statOnline">0 Çevrimiçi</span>
+        <!-- Map Stats -->
+        <div class="map-stats">
+          <button class="mobile-menu-btn map-pill" onclick="toggleSidebar()" style="display:none;cursor:pointer;border:none" id="menuBtn">
+            <span class="material-icons" style="font-size:18px;color:var(--text)">menu</span>
+            <span>Sürücüler</span>
+          </button>
+          <div class="map-pill">
+            <span class="material-icons" style="color:var(--green);font-size:14px">circle</span>
+            <span id="statOnline">0 Çevrimiçi</span>
           </div>
-          <div style="background:#fff;padding:8px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);display:flex;align-items:center;gap:6px">
-            <span class="material-icons" style="color:#E53935;font-size:18px">speed</span>
-            <span style="font-size:13px;font-weight:600" id="statAvgSpeed">Ort. 0 km/s</span>
+          <div class="map-pill">
+            <span class="material-icons" style="color:var(--blue);font-size:14px">speed</span>
+            <span id="statAvgSpeed">Ort. 0 km/s</span>
           </div>
         </div>
 
-        <!-- FAB Buttons -->
+        <!-- FAB -->
         <div class="fab-container">
           <button class="fab fab-drivers" onclick="toggleDriverPanel()" title="Sürücü Yönetimi">
             <span class="material-icons">person_add</span>
@@ -297,20 +402,20 @@
         </div>
 
         <!-- Notification Panel -->
-        <div class="notify-panel" id="notifyPanel">
-          <div class="notify-header">
+        <div class="overlay-panel" id="notifyPanel">
+          <div class="panel-header" style="background:linear-gradient(135deg,var(--primary),var(--primary-dark))">
             <h3>Bildirim Gönder</h3>
-            <button class="notify-close" onclick="toggleNotifyPanel()">&times;</button>
+            <button class="panel-close" onclick="toggleNotifyPanel()">&times;</button>
           </div>
-          <div class="notify-body">
-            <div class="notify-target">
-              <label>Alıcı</label>
-              <select id="notifyTarget">
+          <div class="panel-body">
+            <div style="margin-bottom:14px">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">Alıcı</label>
+              <select id="notifyTarget" class="input">
                 <option value="">Tüm Sürücülere</option>
               </select>
             </div>
-            <input type="text" class="notify-input" id="notifyTitle" placeholder="Başlık">
-            <textarea class="notify-textarea" id="notifyMessage" placeholder="Mesaj yazın..."></textarea>
+            <input type="text" class="input" id="notifyTitle" placeholder="Başlık" style="margin-bottom:10px">
+            <textarea class="input" id="notifyMessage" placeholder="Mesaj yazın..." style="margin-bottom:12px;height:80px;resize:none"></textarea>
             <div class="notify-type">
               <div class="notify-type-btn active" data-type="info" onclick="selectType(this)">
                 <span class="material-icons" style="font-size:16px">info</span><br>Bilgi
@@ -322,35 +427,32 @@
                 <span class="material-icons" style="font-size:16px">error</span><br>Acil
               </div>
             </div>
-            <button class="notify-send" onclick="sendNotification()">
-              <span class="material-icons" style="font-size:18px;vertical-align:middle">send</span>
-              Gönder
+            <button class="btn btn-primary" onclick="sendNotification()">
+              <span class="material-icons" style="font-size:18px">send</span> Gönder
             </button>
           </div>
         </div>
-      </div>
 
         <!-- Driver Management Panel -->
-        <div class="notify-panel" id="driverPanel" style="top:80px;right:20px;width:380px">
-          <div class="notify-header" style="background:#1a1a2e">
+        <div class="overlay-panel" id="driverPanel">
+          <div class="panel-header" style="background:linear-gradient(135deg,var(--navy),var(--navy-light))">
             <h3>Sürücü Yönetimi</h3>
-            <button class="notify-close" onclick="toggleDriverPanel()">&times;</button>
+            <button class="panel-close" onclick="toggleDriverPanel()">&times;</button>
           </div>
-          <div class="notify-body">
-            <div style="display:flex;gap:8px;margin-bottom:12px">
-              <input type="text" class="notify-input" id="driverFirstName" placeholder="Ad" style="flex:1;margin:0">
-              <input type="text" class="notify-input" id="driverLastName" placeholder="Soyad" style="flex:1;margin:0">
+          <div class="panel-body">
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <input type="text" class="input" id="driverFirstName" placeholder="Ad" style="flex:1">
+              <input type="text" class="input" id="driverLastName" placeholder="Soyad" style="flex:1">
             </div>
-            <input type="text" class="notify-input" id="driverPhone" placeholder="Telefon (+905...)" style="margin:0 0 8px 0">
-            <input type="password" class="notify-input" id="driverPassword" placeholder="Şifre (min 4 karakter)" style="margin:0 0 12px 0">
-            <button class="notify-send" style="background:#43A047" onclick="createDriver()">
-              <span class="material-icons" style="font-size:18px;vertical-align:middle">person_add</span>
-              Sürücü Ekle
+            <input type="text" class="input" id="driverPhone" placeholder="Telefon (+905...)" style="margin-bottom:8px">
+            <input type="password" class="input" id="driverPassword" placeholder="Şifre (min 4 karakter)" style="margin-bottom:12px">
+            <button class="btn btn-green" onclick="createDriver()">
+              <span class="material-icons" style="font-size:18px">person_add</span> Sürücü Ekle
             </button>
-            <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
-              <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px">Kayıtlı Sürücüler</div>
-              <div id="bookingDriverList" style="max-height:300px;overflow-y:auto">
-                <div style="color:#999;font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">Kayıtlı Sürücüler</div>
+              <div id="bookingDriverList" style="max-height:280px;overflow-y:auto">
+                <div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>
               </div>
             </div>
           </div>
@@ -362,17 +464,15 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // Harita
-    const map = L.map('map').setView([41.0082, 28.9784], 11); // İstanbul
-    L.gridLayer.googleMutant({
-      type: 'roadmap'
-    }).addTo(map);
+    // ========== MAP ==========
+    const map = L.map('map').setView([41.0082, 28.9784], 11);
+    L.gridLayer.googleMutant({ type: 'roadmap' }).addTo(map);
 
-    // Socket.IO
+    // ========== SOCKET ==========
     const socket = io();
     socket.emit('joinPanel');
 
-    // Sürücü verileri
+    // ========== STATE ==========
     const driverData = new Map();
     const driverMarkers = new Map();
     let selectedDriverId = null;
@@ -381,193 +481,120 @@
     let activeTrackMarkers = [];
     let currentHistoryDriver = null;
 
-    // Sürücü ikonu
+    // ========== RESPONSIVE ==========
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+    // Show menu button on mobile
+    if (window.innerWidth <= 768) {
+      document.getElementById('menuBtn').style.display = 'flex';
+    }
+    window.addEventListener('resize', () => {
+      document.getElementById('menuBtn').style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+      if (window.innerWidth > 768) document.getElementById('sidebar').classList.remove('open');
+    });
+
+    // ========== DRIVER ICON ==========
     const createDriverIcon = (online, heading) => {
-      const color = online ? '#43A047' : '#9E9E9E';
+      const color = online ? 'var(--green)' : '#94A3B8';
       return L.divIcon({
         className: 'driver-marker',
-        html: `<div style="
-          width:36px;height:36px;border-radius:50%;
-          background:${color};border:3px solid #fff;
-          box-shadow:0 2px 8px rgba(0,0,0,0.3);
-          display:flex;align-items:center;justify-content:center;
-          color:#fff;font-size:18px;
-          transform:rotate(${heading || 0}deg)
-        "><span class="material-icons" style="font-size:20px">navigation</span></div>`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+        html: `<div style="width:36px;height:36px;border-radius:50%;background:${online ? '#10B981' : '#94A3B8'};border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;color:#fff;transform:rotate(${heading||0}deg)"><span class="material-icons" style="font-size:20px">navigation</span></div>`,
+        iconSize: [36, 36], iconAnchor: [18, 18],
       });
     };
 
-    // Tüm sürücüleri yükle
-    socket.on('allDrivers', (drivers) => {
-      drivers.forEach(d => updateDriver(d));
-      updateStats();
-      updateDriverList();
-    });
-
-    // Sürücü güncellemesi
-    socket.on('driverUpdate', (data) => {
-      updateDriver(data);
-      updateStats();
-      updateDriverList();
-    });
-
-    // Bildirim gönderildi
-    socket.on('notificationSent', (notif) => {
-      showToast(`Bildirim gönderildi: ${notif.title}`, 'success');
-    });
+    // ========== SOCKET EVENTS ==========
+    socket.on('allDrivers', (drivers) => { drivers.forEach(d => updateDriver(d)); updateStats(); updateDriverList(); });
+    socket.on('driverUpdate', (data) => { updateDriver(data); updateStats(); updateDriverList(); });
+    socket.on('notificationSent', (notif) => { showToast(`Bildirim gönderildi: ${notif.title}`, 'success'); });
 
     function updateDriver(data) {
       driverData.set(data.driverId, data);
-
-      // Harita marker
       if (driverMarkers.has(data.driverId)) {
         const marker = driverMarkers.get(data.driverId);
         marker.setLatLng([data.latitude, data.longitude]);
         marker.setIcon(createDriverIcon(data.online, data.heading));
       } else {
-        const marker = L.marker([data.latitude, data.longitude], {
-          icon: createDriverIcon(data.online, data.heading)
-        }).addTo(map);
-
+        const marker = L.marker([data.latitude, data.longitude], { icon: createDriverIcon(data.online, data.heading) }).addTo(map);
         marker.bindPopup('', {maxWidth: 300});
         marker.on('click', async () => {
           selectDriver(data.driverId);
           const d = driverData.get(data.driverId);
-
-          // Önce temel bilgiyi göster
-          marker.setPopupContent(`
-            <div class="popup-name">${d.firstName} ${d.lastName}</div>
-            <div class="popup-phone">${d.phone}</div>
-            <div class="popup-info">
-              <span class="popup-chip" style="background:#E3F2FD;color:#1565C0">${Math.round(d.speed)} km/s</span>
-              <span class="popup-chip" style="background:${d.online ? '#E8F5E9;color:#2E7D32' : '#f5f5f5;color:#999'}">${d.online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
-            </div>
-            <div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;color:#999;font-size:12px">Yükleniyor...</div>
-          `);
-
-          // Sıradaki işi çek
+          marker.setPopupContent(`<div class="popup-name">${d.firstName} ${d.lastName}</div><div class="popup-phone">${d.phone}</div><div class="popup-info"><span class="popup-chip" style="background:#EFF6FF;color:#2563EB">${Math.round(d.speed)} km/s</span><span class="popup-chip" style="background:${d.online?'#ECFDF5;color:#059669':'#F1F5F9;color:#94A3B8'}">${d.online?'Çevrimiçi':'Çevrimdışı'}</span></div><div style="margin-top:8px;color:#94A3B8;font-size:11px">Yükleniyor...</div>`);
           try {
             const res = await fetch('/api/driver-booking/' + encodeURIComponent(d.phone));
             const booking = await res.json();
-
-            let bookingHtml = '';
+            let bHtml = '';
             if (booking.found) {
-              const pickupDate = new Date(new Date(booking.pickupTime).getTime() + 3 * 3600000);
-              const timeStr = pickupDate.getHours().toString().padStart(2,'0') + ':' + pickupDate.getMinutes().toString().padStart(2,'0');
-              const day = pickupDate.getDate().toString().padStart(2,'0');
+              const dt = booking.pickupTime?.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+              const timeStr = dt ? `${dt[4]}:${dt[5]}` : '--:--';
               const months = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-              const dateStr = day + ' ' + months[pickupDate.getMonth()];
-
-              const statusLabels = {NEW:'Yeni',ACCEPTED:'Kabul',DRIVER_ASSIGNED:'Atandı'};
-              const statusColors = {NEW:'#FF9800',ACCEPTED:'#1E88E5',DRIVER_ASSIGNED:'#43A047'};
-
-              bookingHtml = `
-                <div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <span style="font-size:12px;font-weight:700;color:#333">Sıradaki Transfer</span>
-                    <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:${statusColors[booking.status] || '#999'};color:#fff">${statusLabels[booking.status] || booking.status}</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
-                    <span class="material-icons" style="font-size:14px;color:#E53935">schedule</span>
-                    <span style="font-size:13px;font-weight:600;color:#E53935">${dateStr} ${timeStr}</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
-                    <span class="material-icons" style="font-size:14px;color:#43A047">trip_origin</span>
-                    <span style="font-size:12px;color:#333">${booking.pickup}</span>
-                    ${booking.pickupType === 'AIRPORT' ? '<span class="material-icons" style="font-size:13px;color:#1E88E5">flight</span>' : ''}
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
-                    <span class="material-icons" style="font-size:14px;color:#E53935">place</span>
-                    <span style="font-size:12px;color:#333">${booking.dropoff}</span>
-                  </div>
-                  <div style="display:flex;gap:6px;flex-wrap:wrap">
-                    <span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#f5f5f5;color:#666">${booking.passengerName}</span>
-                    <span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#f5f5f5;color:#666">${booking.passengerCount} kişi</span>
-                    ${booking.flightNumber ? `<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#E3F2FD;color:#1565C0">${booking.flightNumber}</span>` : ''}
-                    ${booking.meetAndGreet ? `<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#E8F5E9;color:#2E7D32">M&G</span>` : ''}
-                  </div>
-                </div>
-              `;
-            } else {
-              bookingHtml = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;color:#999;font-size:12px">Atanmış transfer yok</div>`;
-            }
-
-            marker.setPopupContent(`
-              <div class="popup-name">${d.firstName} ${d.lastName}</div>
-              <div class="popup-phone">${d.phone}</div>
-              <div class="popup-info">
-                <span class="popup-chip" style="background:#E3F2FD;color:#1565C0">${Math.round(d.speed)} km/s</span>
-                <span class="popup-chip" style="background:${d.online ? '#E8F5E9;color:#2E7D32' : '#f5f5f5;color:#999'}">${d.online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
-              </div>
-              ${bookingHtml}
-            `);
+              const dateStr = dt ? `${dt[3]} ${months[parseInt(dt[2],10)-1]}` : '';
+              const stColors = {NEW:'#F59E0B',ACCEPTED:'#3B82F6',DRIVER_ASSIGNED:'#10B981'};
+              const stLabels = {NEW:'Yeni',ACCEPTED:'Kabul',DRIVER_ASSIGNED:'Atandı'};
+              bHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#0F172A">Sıradaki Transfer</span><span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:6px;background:${stColors[booking.status]||'#94A3B8'};color:#fff">${stLabels[booking.status]||booking.status}</span></div><div style="font-size:12px;font-weight:600;color:#E53935;margin-bottom:6px">${dateStr} ${timeStr}</div><div style="font-size:11px;color:#334155;margin-bottom:3px">📍 ${booking.pickup}</div><div style="font-size:11px;color:#334155">🏁 ${booking.dropoff}</div><div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap"><span style="font-size:9px;padding:2px 6px;border-radius:4px;background:#F1F5F9;color:#64748B">${booking.passengerName}</span><span style="font-size:9px;padding:2px 6px;border-radius:4px;background:#F1F5F9;color:#64748B">${booking.passengerCount} kişi</span>${booking.flightNumber?`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:#EFF6FF;color:#2563EB">${booking.flightNumber}</span>`:''}</div></div>`;
+            } else { bHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E2E8F0;color:#94A3B8;font-size:11px">Atanmış transfer yok</div>`; }
+            marker.setPopupContent(`<div class="popup-name">${d.firstName} ${d.lastName}</div><div class="popup-phone">${d.phone}</div><div class="popup-info"><span class="popup-chip" style="background:#EFF6FF;color:#2563EB">${Math.round(d.speed)} km/s</span><span class="popup-chip" style="background:${d.online?'#ECFDF5;color:#059669':'#F1F5F9;color:#94A3B8'}">${d.online?'Çevrimiçi':'Çevrimdışı'}</span></div>${bHtml}`);
             marker.openPopup();
           } catch(e) {}
         });
-
         driverMarkers.set(data.driverId, marker);
       }
     }
 
+    // ========== STATS ==========
     function updateStats() {
-      const drivers = Array.from(driverData.values());
-      const online = drivers.filter(d => d.online).length;
-      const speeds = drivers.filter(d => d.online && d.speed > 0).map(d => d.speed);
-      const avgSpeed = speeds.length > 0 ? Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length) : 0;
-
-      document.getElementById('driverCount').textContent = `(${drivers.length})`;
-      document.getElementById('onlineCount').textContent = `${online} Çevrimiçi`;
+      const all = Array.from(driverData.values());
+      const online = all.filter(d => d.online).length;
+      const speeds = all.filter(d => d.online && d.speed > 0).map(d => d.speed);
+      const avg = speeds.length > 0 ? Math.round(speeds.reduce((a,b) => a+b, 0) / speeds.length) : 0;
+      document.getElementById('statOnlineNum').textContent = online;
+      document.getElementById('statTotalNum').textContent = all.length;
+      document.getElementById('statAvgSpd').textContent = avg;
       document.getElementById('statOnline').textContent = `${online} Çevrimiçi`;
-      document.getElementById('statAvgSpeed').textContent = `Ort. ${avgSpeed} km/s`;
-
-      // Alıcı dropdown güncelle
+      document.getElementById('statAvgSpeed').textContent = `Ort. ${avg} km/s`;
       updateNotifyTargets();
     }
 
+    // ========== DRIVER LIST ==========
     function updateDriverList() {
       const list = document.getElementById('driverList');
       const search = document.getElementById('searchInput').value.toLowerCase();
-      const drivers = Array.from(driverData.values())
-        .filter(d => {
-          const name = `${d.firstName} ${d.lastName}`.toLowerCase();
-          return name.includes(search) || d.phone.includes(search);
-        })
-        .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
-
-      list.innerHTML = drivers.map(d => {
-        const initials = (d.firstName[0] || '') + (d.lastName[0] || '');
+      const all = Array.from(driverData.values())
+        .filter(d => `${d.firstName} ${d.lastName}`.toLowerCase().includes(search) || d.phone.includes(search))
+        .sort((a,b) => (b.online?1:0) - (a.online?1:0));
+      list.innerHTML = all.map(d => {
+        const ini = (d.firstName[0]||'') + (d.lastName[0]||'');
         const ago = getTimeAgo(d.lastUpdate);
-        return `
-          <div class="driver-item ${selectedDriverId === d.driverId ? 'selected' : ''}"
-               onclick="focusDriver('${d.driverId}')">
-            <div class="driver-avatar ${d.online ? 'online' : 'offline'}">${initials}</div>
-            <div class="driver-info">
-              <div class="driver-name">${d.firstName} ${d.lastName}</div>
-              <div class="driver-phone">${d.phone}</div>
-              <div class="driver-meta">
-                <span class="driver-speed">${Math.round(d.speed)} km/s</span>
-                <span class="driver-status ${d.online ? 'online' : 'offline'}">${d.online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
-                <span class="driver-time">${ago}</span>
-              </div>
+        return `<div class="driver-item ${selectedDriverId===d.driverId?'selected':''}" onclick="focusDriver('${d.driverId}')">
+          <div class="driver-avatar ${d.online?'online':'offline'}">${ini}</div>
+          <div class="driver-info">
+            <div class="driver-name">${d.firstName} ${d.lastName}</div>
+            <div class="driver-phone">${d.phone}</div>
+            <div class="driver-meta">
+              <span class="chip chip-speed">${Math.round(d.speed)} km/s</span>
+              <span class="chip ${d.online?'chip-online':'chip-offline'}">${d.online?'Çevrimiçi':'Çevrimdışı'}</span>
+              <span class="chip chip-time">${ago}</span>
             </div>
-            <span class="material-icons" onclick="event.stopPropagation();showDriverStats(driverData.get('${d.driverId}'))" style="font-size:20px;color:#999;cursor:pointer;padding:4px" title="Performans">bar_chart</span>
           </div>
-        `;
+          <div class="driver-actions">
+            <button class="btn-icon" onclick="event.stopPropagation();showDriverStats(driverData.get('${d.driverId}'))" title="Performans"><span class="material-icons" style="font-size:16px">bar_chart</span></button>
+          </div>
+        </div>`;
       }).join('');
     }
 
-    function focusDriver(driverId) {
-      selectedDriverId = driverId;
-      const d = driverData.get(driverId);
+    function focusDriver(id) {
+      selectedDriverId = id;
+      const d = driverData.get(id);
       if (d) {
         map.setView([d.latitude, d.longitude], 15);
-        const marker = driverMarkers.get(driverId);
-        if (marker) marker.openPopup();
+        const m = driverMarkers.get(id); if (m) m.openPopup();
         loadDriverHistory(d);
       }
       updateDriverList();
+      if (window.innerWidth <= 768) toggleSidebar();
     }
 
     function clearTrack() {
@@ -575,15 +602,8 @@
       activeTrackMarkers.forEach(m => map.removeLayer(m));
       activeTrackMarkers = [];
     }
-
-    function closeHistory() {
-      document.getElementById('historyPanel').classList.remove('open');
-      clearTrack();
-    }
-
-    function reloadHistory() {
-      if (currentHistoryDriver) loadDriverHistory(currentHistoryDriver);
-    }
+    function closeHistory() { document.getElementById('historyPanel').classList.remove('open'); clearTrack(); }
+    function reloadHistory() { if (currentHistoryDriver) loadDriverHistory(currentHistoryDriver); }
 
     async function loadDriverHistory(driver) {
       currentHistoryDriver = driver;
@@ -591,508 +611,125 @@
       const list = document.getElementById('historyList');
       const title = document.getElementById('historyTitle');
       const days = document.getElementById('historyDays').value;
-
       title.textContent = `${driver.firstName} ${driver.lastName}`;
-      list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">Yükleniyor...</div>';
-      panel.classList.add('open');
-      clearTrack();
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:12px">Yükleniyor...</div>';
+      panel.classList.add('open'); clearTrack();
 
-      // Konum geçmişi + booking geçmişi paralel çek
       const [trackRes, bookingRes] = await Promise.all([
-        fetch(`/api/driver-track/${encodeURIComponent(driver.driverId)}?days=${days}`).then(r => r.json()).catch(() => []),
-        fetch('/api/driver-history/' + encodeURIComponent(driver.phone)).then(r => r.json()).catch(() => []),
+        fetch(`/api/driver-track/${encodeURIComponent(driver.driverId)}?days=${days}`).then(r=>r.json()).catch(()=>[]),
+        fetch('/api/driver-history/'+encodeURIComponent(driver.phone)).then(r=>r.json()).catch(()=>[]),
       ]);
-
       let html = '';
 
-      // === KONUM GEÇMİŞİ ===
       if (trackRes.length > 0) {
-        // Haritada rota çiz
         const latlngs = trackRes.map(p => [p.lat, p.lng]);
-        activeTrackLine = L.polyline(latlngs, {
-          color: '#E53935', weight: 3, opacity: 0.7,
-          dashArray: '8, 6',
-        }).addTo(map);
-
-        // Başlangıç ve bitiş noktası
-        const startIcon = L.divIcon({
-          className: '',
-          html: '<div style="width:12px;height:12px;border-radius:50%;background:#43A047;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
-          iconSize: [12, 12], iconAnchor: [6, 6],
-        });
-        const endIcon = L.divIcon({
-          className: '',
-          html: '<div style="width:12px;height:12px;border-radius:50%;background:#E53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
-          iconSize: [12, 12], iconAnchor: [6, 6],
-        });
-
-        const first = trackRes[0];
-        const last = trackRes[trackRes.length - 1];
-        const startM = L.marker([first.lat, first.lng], {icon: startIcon})
-          .bindTooltip(formatTrackTime(first.timestamp), {permanent: false})
-          .addTo(map);
-        const endM = L.marker([last.lat, last.lng], {icon: endIcon})
-          .bindTooltip(formatTrackTime(last.timestamp), {permanent: false})
-          .addTo(map);
-        activeTrackMarkers.push(startM, endM);
-
-        // Saatlik noktalar ekle
-        let lastHour = -1;
-        trackRes.forEach(p => {
-          const h = new Date(p.ts).getHours();
-          if (h !== lastHour) {
-            lastHour = h;
-            const hourIcon = L.divIcon({
-              className: '',
-              html: `<div style="background:#1a1a2e;color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:10px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3)">${formatTrackTime(p.timestamp)}</div>`,
-              iconSize: [0, 0], iconAnchor: [20, 10],
-            });
-            const hm = L.marker([p.lat, p.lng], {icon: hourIcon}).addTo(map);
-            activeTrackMarkers.push(hm);
-          }
-        });
-
+        activeTrackLine = L.polyline(latlngs, {color:'#E53935',weight:3,opacity:0.7,dashArray:'8, 6'}).addTo(map);
+        const mkIcon = (color) => L.divIcon({className:'',html:`<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`,iconSize:[12,12],iconAnchor:[6,6]});
+        const first=trackRes[0], last=trackRes[trackRes.length-1];
+        activeTrackMarkers.push(L.marker([first.lat,first.lng],{icon:mkIcon('#10B981')}).bindTooltip(fmtTime(first.timestamp)).addTo(map));
+        activeTrackMarkers.push(L.marker([last.lat,last.lng],{icon:mkIcon('#E53935')}).bindTooltip(fmtTime(last.timestamp)).addTo(map));
+        let lh=-1; trackRes.forEach(p=>{const h=new Date(p.ts).getHours();if(h!==lh){lh=h;const ic=L.divIcon({className:'',html:`<div style="background:#111827;color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:10px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3)">${fmtTime(p.timestamp)}</div>`,iconSize:[0,0],iconAnchor:[20,10]});activeTrackMarkers.push(L.marker([p.lat,p.lng],{icon:ic}).addTo(map))}});
         map.fitBounds(activeTrackLine.getBounds().pad(0.1));
-
-        // Sidebar'da konum özeti
-        const totalPoints = trackRes.length;
-        const firstTime = formatTrackTime(first.timestamp);
-        const lastTime = formatTrackTime(last.timestamp);
-        const maxSpeed = Math.round(Math.max(...trackRes.map(p => p.speed)));
-
-        html += `
-          <div style="padding:12px 16px;background:#fff;border-bottom:1px solid #f0f0f0">
-            <div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:6px">
-              <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#E53935">route</span>
-              Konum Geçmişi (${days == 1 ? 'Bugün' : 'Son ' + days + ' Gün'})
-            </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap">
-              <div style="font-size:11px;color:#666"><strong>${totalPoints}</strong> konum noktası</div>
-              <div style="font-size:11px;color:#666">İlk: <strong>${firstTime}</strong></div>
-              <div style="font-size:11px;color:#666">Son: <strong>${lastTime}</strong></div>
-              <div style="font-size:11px;color:#666">Maks: <strong>${maxSpeed} km/s</strong></div>
-            </div>
-          </div>
-          <div style="max-height:200px;overflow-y:auto">
-            ${trackRes.filter((_, i) => i % Math.max(1, Math.floor(trackRes.length / 30)) === 0 || i === trackRes.length - 1).map(p => `
-              <div style="padding:6px 16px;border-bottom:1px solid #f8f8f8;display:flex;align-items:center;gap:8px;font-size:11px">
-                <span style="font-weight:700;color:#1a1a2e;min-width:40px">${formatTrackTime(p.timestamp)}</span>
-                <span style="color:#666">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span>
-                <span style="color:#1565C0;font-weight:600">${Math.round(p.speed)} km/s</span>
-              </div>
-            `).join('')}
-          </div>
-        `;
+        const maxSpd = Math.round(Math.max(...trackRes.map(p=>p.speed)));
+        html += `<div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px"><span class="material-icons" style="font-size:13px;vertical-align:middle;color:var(--primary)">route</span> Konum (${days==1?'Bugün':'Son '+days+' Gün'})</div><div style="display:flex;gap:10px;font-size:11px;color:var(--text-secondary)"><span><b>${trackRes.length}</b> nokta</span><span>İlk: <b>${fmtTime(first.timestamp)}</b></span><span>Son: <b>${fmtTime(last.timestamp)}</b></span><span>Maks: <b>${maxSpd} km/s</b></span></div></div>`;
       } else {
-        html += '<div style="padding:16px;text-align:center;color:#999;font-size:12px"><span class="material-icons" style="font-size:14px;vertical-align:middle">route</span> Bu dönemde konum verisi yok</div>';
+        html += '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px"><span class="material-icons" style="font-size:13px;vertical-align:middle">route</span> Bu dönemde konum verisi yok</div>';
       }
 
-      // === BOOKING GEÇMİŞİ ===
       if (bookingRes.length > 0) {
-        const statusMap = {
-          NEW: {label: 'Yeni', color: '#FF9800'},
-          ACCEPTED: {label: 'Kabul', color: '#1E88E5'},
-          DRIVER_ASSIGNED: {label: 'Atandı', color: '#43A047'},
-          COMPLETED: {label: 'Tamamlandı', color: '#2E7D32'},
-          CANCELLED: {label: 'İptal', color: '#E53935'},
-          NO_SHOW: {label: 'Gelmedi', color: '#9E9E9E'},
-        };
-        const months = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-
-        html += `
-          <div style="padding:12px 16px;background:#fff;border-bottom:1px solid #f0f0f0;border-top:2px solid #e0e0e0">
-            <div style="font-size:12px;font-weight:700;color:#1a1a2e">
-              <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#1E88E5">assignment</span>
-              Transferler (${bookingRes.length})
-            </div>
-          </div>
-        `;
-
-        html += bookingRes.map(b => {
-          const dt = b.pickup_date_time?.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-          const day = dt ? dt[3] : '--';
-          const month = dt ? months[parseInt(dt[2], 10) - 1] : '--';
-          const time = dt ? `${dt[4]}:${dt[5]}` : '--:--';
-          const st = statusMap[b.status] || {label: b.status, color: '#999'};
-          const pickup = b.pickup?.establishment_name || b.pickup?.address || '-';
-          const dropoff = b.dropoff?.establishment_name || b.dropoff?.address || '-';
-          const pax = b.passenger?.name || '';
-          const paxCount = b.passenger_count || 1;
-          const isAirport = b.pickup?.type === 'AIRPORT' || b.dropoff?.type === 'AIRPORT';
-
-          return `
-            <div class="history-item">
-              <div class="history-date">
-                <div class="day">${day}</div>
-                <div class="month">${month}</div>
-                <div class="time">${time}</div>
-              </div>
-              <div class="history-route">
-                <div class="from"><span class="material-icons" style="font-size:13px;color:#43A047">trip_origin</span> ${pickup}</div>
-                <div class="to"><span class="material-icons" style="font-size:13px;color:#E53935">place</span> ${dropoff}</div>
-                <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
-                  <span class="history-badge" style="background:${st.color}">${st.label}</span>
-                  <span style="font-size:10px;color:#999">${pax} · ${paxCount} kişi</span>
-                  ${isAirport ? '<span class="material-icons" style="font-size:12px;color:#1E88E5">flight</span>' : ''}
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('');
+        const stMap={NEW:{l:'Yeni',c:'#F59E0B'},ACCEPTED:{l:'Kabul',c:'#3B82F6'},DRIVER_ASSIGNED:{l:'Atandı',c:'#10B981'},COMPLETED:{l:'Tamamlandı',c:'#059669'},CANCELLED:{l:'İptal',c:'#E53935'},NO_SHOW:{l:'Gelmedi',c:'#94A3B8'}};
+        const months=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+        html += `<div style="padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);border-top:2px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--text)"><span class="material-icons" style="font-size:13px;vertical-align:middle;color:var(--blue)">assignment</span> Transferler (${bookingRes.length})</div></div>`;
+        html += bookingRes.map(b=>{const dt=b.pickup_date_time?.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);const day=dt?dt[3]:'--';const month=dt?months[parseInt(dt[2],10)-1]:'--';const time=dt?`${dt[4]}:${dt[5]}`:'--:--';const st=stMap[b.status]||{l:b.status,c:'#94A3B8'};const pickup=b.pickup?.establishment_name||b.pickup?.address||'-';const dropoff=b.dropoff?.establishment_name||b.dropoff?.address||'-';const pax=b.passenger?.name||'';const cnt=b.passenger_count||1;const air=b.pickup?.type==='AIRPORT'||b.dropoff?.type==='AIRPORT';return `<div class="history-item"><div class="history-date"><div class="day">${day}</div><div class="month">${month}</div><div class="time">${time}</div></div><div class="history-route"><div class="from"><span class="material-icons" style="font-size:13px;color:#10B981">trip_origin</span> ${pickup}</div><div class="to"><span class="material-icons" style="font-size:13px;color:#E53935">place</span> ${dropoff}</div><div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap"><span class="history-badge" style="background:${st.c}">${st.l}</span><span style="font-size:10px;color:#94A3B8">${pax} · ${cnt} kişi</span>${air?'<span class="material-icons" style="font-size:12px;color:#3B82F6">flight</span>':''}</div></div></div>`;}).join('');
       } else {
-        html += '<div style="padding:16px;text-align:center;color:#999;font-size:12px;border-top:2px solid #e0e0e0"><span class="material-icons" style="font-size:14px;vertical-align:middle">assignment</span> Atanmış transfer yok</div>';
+        html += '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;border-top:2px solid var(--border)"><span class="material-icons" style="font-size:13px;vertical-align:middle">assignment</span> Atanmış transfer yok</div>';
       }
-
       list.innerHTML = html;
     }
 
-    function formatTrackTime(ts) {
-      const m = ts?.match?.(/T(\d{2}):(\d{2})/);
-      return m ? `${m[1]}:${m[2]}` : new Date(ts).toTimeString().slice(0, 5);
-    }
+    function fmtTime(ts) { const m=ts?.match?.(/T(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:new Date(ts).toTimeString().slice(0,5); }
+    function selectDriver(id) { selectedDriverId=id; updateDriverList(); const el=document.querySelector('.driver-item.selected'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
+    function filterDrivers() { updateDriverList(); }
+    function centerMap() { const m=Array.from(driverMarkers.values()); if(m.length>0){map.fitBounds(L.featureGroup(m).getBounds().pad(0.1))}else{map.setView([41.0082,28.9784],11)} }
 
-    function selectDriver(driverId) {
-      selectedDriverId = driverId;
-      updateDriverList();
-      // Sidebar'da görünür yap
-      const item = document.querySelector(`.driver-item.selected`);
-      if (item) item.scrollIntoView({behavior: 'smooth', block: 'center'});
-    }
-
-    function filterDrivers() {
-      updateDriverList();
-    }
-
-    function centerMap() {
-      const markers = Array.from(driverMarkers.values());
-      if (markers.length > 0) {
-        const group = L.featureGroup(markers);
-        map.fitBounds(group.getBounds().pad(0.1));
-      } else {
-        map.setView([41.0082, 28.9784], 11);
-      }
-    }
-
-    // Bildirim
-    function toggleNotifyPanel() {
-      document.getElementById('notifyPanel').classList.toggle('active');
-    }
-
-    function selectType(el) {
-      document.querySelectorAll('.notify-type-btn').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
-      notifyType = el.dataset.type;
-    }
-
-    function updateNotifyTargets() {
-      const select = document.getElementById('notifyTarget');
-      const current = select.value;
-      select.innerHTML = '<option value="">Tüm Sürücülere</option>';
-      Array.from(driverData.values()).forEach(d => {
-        select.innerHTML += `<option value="${d.driverId}">${d.firstName} ${d.lastName}</option>`;
-      });
-      select.value = current;
-    }
-
+    // ========== NOTIFICATIONS ==========
+    function toggleNotifyPanel() { document.getElementById('notifyPanel').classList.toggle('active'); }
+    function selectType(el) { document.querySelectorAll('.notify-type-btn').forEach(b=>b.classList.remove('active')); el.classList.add('active'); notifyType=el.dataset.type; }
+    function updateNotifyTargets() { const s=document.getElementById('notifyTarget'); const v=s.value; s.innerHTML='<option value="">Tüm Sürücülere</option>'; Array.from(driverData.values()).forEach(d=>{s.innerHTML+=`<option value="${d.driverId}">${d.firstName} ${d.lastName}</option>`}); s.value=v; }
     async function sendNotification() {
-      const title = document.getElementById('notifyTitle').value.trim();
-      const message = document.getElementById('notifyMessage').value.trim();
-      const target = document.getElementById('notifyTarget').value;
-
-      if (!title || !message) {
-        showToast('Başlık ve mesaj gerekli', 'error');
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/notify', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            driverId: target || undefined,
-            title,
-            message,
-            type: notifyType,
-          }),
-        });
-        if (res.ok) {
-          showToast('Bildirim gönderildi!', 'success');
-          document.getElementById('notifyTitle').value = '';
-          document.getElementById('notifyMessage').value = '';
-          toggleNotifyPanel();
-        }
-      } catch (err) {
-        showToast('Bildirim gönderilemedi', 'error');
-      }
+      const title=document.getElementById('notifyTitle').value.trim(), msg=document.getElementById('notifyMessage').value.trim(), target=document.getElementById('notifyTarget').value;
+      if(!title||!msg){showToast('Başlık ve mesaj gerekli','error');return}
+      try{const r=await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({driverId:target||undefined,title,message:msg,type:notifyType})});if(r.ok){showToast('Bildirim gönderildi!','success');document.getElementById('notifyTitle').value='';document.getElementById('notifyMessage').value='';toggleNotifyPanel()}}catch(e){showToast('Bildirim gönderilemedi','error')}
     }
 
-    function getTimeAgo(timestamp) {
-      const diff = Date.now() - timestamp;
-      const seconds = Math.floor(diff / 1000);
-      if (seconds < 60) return `${seconds}sn`;
-      const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}dk`;
-      const hours = Math.floor(minutes / 60);
-      return `${hours}sa`;
-    }
+    // ========== UTILS ==========
+    function getTimeAgo(ts) { const d=Date.now()-ts,s=Math.floor(d/1000); if(s<60)return `${s}sn`; const m=Math.floor(s/60); if(m<60)return `${m}dk`; return `${Math.floor(m/60)}sa`; }
+    function showToast(msg,type) { const t=document.getElementById('toast'); t.textContent=msg; t.className=`toast ${type} show`; setTimeout(()=>t.className='toast',3000); }
 
-    function showToast(msg, type) {
-      const toast = document.getElementById('toast');
-      toast.textContent = msg;
-      toast.className = `toast ${type} show`;
-      setTimeout(() => toast.className = 'toast', 3000);
-    }
-
-    // ============================================
-    // Sürücü Yönetimi
-    // ============================================
-    function toggleDriverPanel() {
-      document.getElementById('driverPanel').classList.toggle('active');
-      loadBookingDrivers();
-    }
-
+    // ========== DRIVER MANAGEMENT ==========
+    function toggleDriverPanel() { document.getElementById('driverPanel').classList.toggle('active'); loadBookingDrivers(); }
     async function loadBookingDrivers() {
-      const list = document.getElementById('bookingDriverList');
-      list.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>';
-      try {
-        const res = await fetch('/api/booking-drivers');
-        const drivers = await res.json();
-        if (drivers.length === 0) {
-          list.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';
-          return;
-        }
-        list.innerHTML = drivers.map(d => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#333">${d.first_name} ${d.last_name}</div>
-              <div style="font-size:11px;color:#999">${d.telephone_number}</div>
-            </div>
-            <div style="display:flex;gap:6px">
-              <button onclick="changePassword('${d.telephone_number}','${d.first_name} ${d.last_name}')"
-                style="background:#E3F2FD;border:none;color:#1565C0;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
-                <span class="material-icons" style="font-size:14px">key</span> Şifre
-              </button>
-              <button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
-                style="background:#FFEBEE;border:none;color:#E53935;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
-                <span class="material-icons" style="font-size:14px">delete</span> Sil
-              </button>
-            </div>
-          </div>
-        `).join('');
-      } catch (err) {
-        list.innerHTML = '<div style="color:#E53935;font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>';
-      }
+      const list=document.getElementById('bookingDriverList');
+      list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>';
+      try{const r=await fetch('/api/booking-drivers');const drivers=await r.json();
+      if(drivers.length===0){list.innerHTML='<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';return}
+      list.innerHTML=drivers.map(d=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F8FAFC"><div><div style="font-size:13px;font-weight:600;color:var(--text)">${d.first_name} ${d.last_name}</div><div style="font-size:11px;color:var(--text-secondary)">${d.telephone_number}</div></div><div style="display:flex;gap:6px"><button onclick="changePassword('${d.telephone_number}','${d.first_name} ${d.last_name}')" style="background:#EFF6FF;border:none;color:#2563EB;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px"><span class="material-icons" style="font-size:13px">key</span>Şifre</button><button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')" style="background:#FEF2F2;border:none;color:#DC2626;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px"><span class="material-icons" style="font-size:13px">delete</span>Sil</button></div></div>`).join('')}catch(e){list.innerHTML='<div style="color:var(--primary);font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>'}
     }
-
     async function createDriver() {
-      const firstName = document.getElementById('driverFirstName').value.trim();
-      const lastName = document.getElementById('driverLastName').value.trim();
-      const phone = document.getElementById('driverPhone').value.trim();
-      const password = document.getElementById('driverPassword').value.trim();
-
-      if (!firstName || !lastName || !phone) {
-        showToast('Ad, soyad ve telefon gerekli', 'error');
-        return;
-      }
-      if (!password || password.length < 4) {
-        showToast('Şifre en az 4 karakter olmalı', 'error');
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/booking-drivers', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({first_name: firstName, last_name: lastName, telephone_number: phone}),
-        });
-        if (res.status === 201) {
-          // Şifreyi de kaydet
-          await fetch('/api/driver-password', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({phone, password}),
-          });
-          showToast(`${firstName} ${lastName} eklendi!`, 'success');
-          document.getElementById('driverFirstName').value = '';
-          document.getElementById('driverLastName').value = '';
-          document.getElementById('driverPhone').value = '';
-          document.getElementById('driverPassword').value = '';
-          loadBookingDrivers();
-        } else if (res.status === 409) {
-          showToast('Bu telefon numarası zaten kayıtlı', 'error');
-        } else {
-          const data = await res.json();
-          showToast(data.error || 'Eklenemedi', 'error');
-        }
-      } catch (err) {
-        showToast('Bağlantı hatası', 'error');
-      }
+      const fn=document.getElementById('driverFirstName').value.trim(),ln=document.getElementById('driverLastName').value.trim(),ph=document.getElementById('driverPhone').value.trim(),pw=document.getElementById('driverPassword').value.trim();
+      if(!fn||!ln||!ph){showToast('Ad, soyad ve telefon gerekli','error');return}
+      if(!pw||pw.length<4){showToast('Şifre en az 4 karakter olmalı','error');return}
+      try{const r=await fetch('/api/booking-drivers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({first_name:fn,last_name:ln,telephone_number:ph})});
+      if(r.status===201){await fetch('/api/driver-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph,password:pw})});showToast(`${fn} ${ln} eklendi!`,'success');['driverFirstName','driverLastName','driverPhone','driverPassword'].forEach(id=>document.getElementById(id).value='');loadBookingDrivers()}
+      else if(r.status===409){showToast('Bu telefon numarası zaten kayıtlı','error')}else{const d=await r.json();showToast(d.error||'Eklenemedi','error')}}catch(e){showToast('Bağlantı hatası','error')}
+    }
+    async function changePassword(phone,name) {
+      const pw=prompt(`${name} için yeni şifre girin (min 4 karakter):`);
+      if(!pw||pw.length<4){if(pw!==null)showToast('Şifre en az 4 karakter olmalı','error');return}
+      try{const r=await fetch('/api/driver-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password:pw})});if(r.ok)showToast(`${name} şifresi güncellendi`,'success');else showToast('Şifre güncellenemedi','error')}catch(e){showToast('Bağlantı hatası','error')}
+    }
+    async function deleteBookingDriver(id,name) {
+      if(!confirm(`${name} silinsin mi?`))return;
+      try{const r=await fetch(`/api/booking-drivers/${id}`,{method:'DELETE'});if(r.ok){showToast(`${name} silindi`,'success');loadBookingDrivers()}else showToast('Silinemedi','error')}catch(e){showToast('Bağlantı hatası','error')}
     }
 
-    async function changePassword(phone, name) {
-      const newPassword = prompt(`${name} için yeni şifre girin (min 4 karakter):`);
-      if (!newPassword || newPassword.length < 4) {
-        if (newPassword !== null) showToast('Şifre en az 4 karakter olmalı', 'error');
-        return;
-      }
-      try {
-        const res = await fetch('/api/driver-password', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({phone, password: newPassword}),
-        });
-        if (res.ok) {
-          showToast(`${name} şifresi güncellendi`, 'success');
-        } else {
-          showToast('Şifre güncellenemedi', 'error');
-        }
-      } catch (err) {
-        showToast('Bağlantı hatası', 'error');
-      }
-    }
+    // ========== INITIAL LOAD & POLLING ==========
+    fetch('/api/drivers').then(r=>r.json()).then(d=>{d.forEach(x=>updateDriver(x));updateStats();updateDriverList()});
+    setInterval(()=>{fetch('/api/drivers').then(r=>r.json()).then(d=>{d.forEach(x=>updateDriver(x));updateStats();updateDriverList()})},30000);
 
-    async function deleteBookingDriver(driverId, name) {
-      if (!confirm(`${name} silinsin mi?`)) return;
-      try {
-        const res = await fetch(`/api/booking-drivers/${driverId}`, {method: 'DELETE'});
-        if (res.ok) {
-          showToast(`${name} silindi`, 'success');
-          loadBookingDrivers();
-        } else {
-          showToast('Silinemedi', 'error');
-        }
-      } catch (err) {
-        showToast('Bağlantı hatası', 'error');
-      }
-    }
-
-    // Sayfa yüklenince sürücüleri çek
-    fetch('/api/drivers')
-      .then(r => r.json())
-      .then(drivers => {
-        drivers.forEach(d => updateDriver(d));
-        updateStats();
-        updateDriverList();
-      });
-
-    // Her 30 saniyede güncelle
-    setInterval(() => {
-      fetch('/api/drivers')
-        .then(r => r.json())
-        .then(drivers => {
-          drivers.forEach(d => updateDriver(d));
-          updateStats();
-          updateDriverList();
-        });
-    }, 30000);
-
-    // ========================================
-    // ISI HARİTASI
-    // ========================================
-    let heatLayer = null;
-    let heatActive = false;
-
+    // ========== HEATMAP ==========
+    let heatLayer=null, heatActive=false;
     async function toggleHeatmap() {
-      if (heatActive) {
-        if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-        heatActive = false;
-        showToast('Isı haritası kapatıldı', 'info');
-        return;
-      }
-
-      try {
-        showToast('Isı haritası yükleniyor...', 'info');
-        const res = await fetch('/api/heatmap');
-        const points = await res.json();
-
-        if (points.length === 0) {
-          showToast('Heatmap verisi yok', 'error');
-          return;
-        }
-
-        const heatData = points.map(p => [p.lat, p.lng, 0.6]);
-        heatLayer = L.heatLayer(heatData, {
-          radius: 25,
-          blur: 15,
-          maxZoom: 17,
-          max: 1.0,
-          gradient: {0.2: '#2196F3', 0.4: '#4CAF50', 0.6: '#FFEB3B', 0.8: '#FF9800', 1.0: '#E53935'},
-        }).addTo(map);
-
-        heatActive = true;
-        showToast(`Isı haritası: ${points.length} nokta`, 'success');
-      } catch (err) {
-        showToast('Isı haritası yüklenemedi', 'error');
-      }
+      if(heatActive){if(heatLayer){map.removeLayer(heatLayer);heatLayer=null}heatActive=false;showToast('Isı haritası kapatıldı','info');return}
+      try{showToast('Isı haritası yükleniyor...','info');const r=await fetch('/api/heatmap');const pts=await r.json();if(pts.length===0){showToast('Heatmap verisi yok','error');return}
+      heatLayer=L.heatLayer(pts.map(p=>[p.lat,p.lng,0.6]),{radius:25,blur:15,maxZoom:17,max:1.0,gradient:{0.2:'#3B82F6',0.4:'#10B981',0.6:'#FBBF24',0.8:'#F59E0B',1.0:'#E53935'}}).addTo(map);heatActive=true;showToast(`Isı haritası: ${pts.length} nokta`,'success')}catch(e){showToast('Isı haritası yüklenemedi','error')}
     }
 
-    // ========================================
-    // SÜRÜCÜ PERFORMANS PANELİ
-    // ========================================
+    // ========== DRIVER STATS ==========
     async function showDriverStats(driver) {
-      try {
-        const res = await fetch('/api/driver-stats/' + encodeURIComponent(driver.phone));
-        const s = await res.json();
-
-        const onlineHrs = Math.floor(s.onlineMinutesToday / 60);
-        const onlineMins = s.onlineMinutesToday % 60;
-
-        const statsHtml = `
-          <div style="position:absolute;top:80px;left:380px;width:320px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);z-index:1000;overflow:hidden" id="statsPanel">
-            <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center">
-              <div>
-                <div style="font-size:16px;font-weight:700">${driver.firstName} ${driver.lastName}</div>
-                <div style="font-size:11px;opacity:0.7">Performans</div>
-              </div>
-              <button onclick="document.getElementById('statsPanel').remove()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer">&times;</button>
-            </div>
-            <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div style="background:#E8F5E9;padding:12px;border-radius:12px;text-align:center">
-                <div style="font-size:24px;font-weight:800;color:#2E7D32">${s.completed}</div>
-                <div style="font-size:11px;color:#666">Tamamlanan</div>
-              </div>
-              <div style="background:#FFF3E0;padding:12px;border-radius:12px;text-align:center">
-                <div style="font-size:24px;font-weight:800;color:#E65100">${s.active}</div>
-                <div style="font-size:11px;color:#666">Aktif</div>
-              </div>
-              <div style="background:#FFEBEE;padding:12px;border-radius:12px;text-align:center">
-                <div style="font-size:24px;font-weight:800;color:#C62828">${s.cancelled}</div>
-                <div style="font-size:11px;color:#666">İptal</div>
-              </div>
-              <div style="background:#E3F2FD;padding:12px;border-radius:12px;text-align:center">
-                <div style="font-size:24px;font-weight:800;color:#1565C0">${s.total}</div>
-                <div style="font-size:11px;color:#666">Toplam</div>
-              </div>
-            </div>
-            <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:8px">
-              <div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f9f9f9;border-radius:10px">
-                <span style="font-size:12px;color:#666">Başarı Oranı</span>
-                <span style="font-size:13px;font-weight:700;color:${s.completionRate >= 80 ? '#2E7D32' : s.completionRate >= 50 ? '#E65100' : '#C62828'}">%${s.completionRate}</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f9f9f9;border-radius:10px">
-                <span style="font-size:12px;color:#666">Bugün</span>
-                <span style="font-size:13px;font-weight:700;color:#1a1a2e">${s.todayCompleted}/${s.todayTotal} transfer</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f9f9f9;border-radius:10px">
-                <span style="font-size:12px;color:#666">Online Süre (Bugün)</span>
-                <span style="font-size:13px;font-weight:700;color:#1a1a2e">${onlineHrs}s ${onlineMins}dk</span>
-              </div>
-              <a href="/api/track/${encodeURIComponent(driver.phone)}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:linear-gradient(135deg,#43A047,#2E7D32);color:#fff;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;margin-top:4px">
-                <span class="material-icons" style="font-size:16px">share_location</span>
-                Canlı Takip Linki
-              </a>
-            </div>
+      try{const r=await fetch('/api/driver-stats/'+encodeURIComponent(driver.phone));const s=await r.json();const hrs=Math.floor(s.onlineMinutesToday/60),mins=s.onlineMinutesToday%60;
+      const old=document.getElementById('statsPanel');if(old)old.remove();
+      document.body.insertAdjacentHTML('beforeend',`
+        <div id="statsPanel" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:340px;max-width:calc(100vw - 32px);background:var(--surface);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.2);z-index:3000;overflow:hidden">
+          <div style="background:linear-gradient(135deg,var(--navy),var(--navy-light));padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-size:16px;font-weight:700">${driver.firstName} ${driver.lastName}</div><div style="font-size:11px;opacity:0.6">Performans</div></div>
+            <button onclick="document.getElementById('statsPanel').remove()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:28px;height:28px;border-radius:8px;cursor:pointer;font-size:18px">&times;</button>
           </div>
-        `;
-
-        // Önceki paneli kaldır
-        const old = document.getElementById('statsPanel');
-        if (old) old.remove();
-
-        document.body.insertAdjacentHTML('beforeend', statsHtml);
-      } catch (err) {
-        showToast('Performans verileri yüklenemedi', 'error');
-      }
+          <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:#ECFDF5;padding:12px;border-radius:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#059669">${s.completed}</div><div style="font-size:10px;color:#64748B;font-weight:600">Tamamlanan</div></div>
+            <div style="background:#FFF7ED;padding:12px;border-radius:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#EA580C">${s.active}</div><div style="font-size:10px;color:#64748B;font-weight:600">Aktif</div></div>
+            <div style="background:#FEF2F2;padding:12px;border-radius:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#DC2626">${s.cancelled}</div><div style="font-size:10px;color:#64748B;font-weight:600">İptal</div></div>
+            <div style="background:#EFF6FF;padding:12px;border-radius:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#2563EB">${s.total}</div><div style="font-size:10px;color:#64748B;font-weight:600">Toplam</div></div>
+          </div>
+          <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg);border-radius:8px"><span style="font-size:12px;color:var(--text-secondary)">Başarı Oranı</span><span style="font-size:13px;font-weight:700;color:${s.completionRate>=80?'#059669':s.completionRate>=50?'#EA580C':'#DC2626'}">%${s.completionRate}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg);border-radius:8px"><span style="font-size:12px;color:var(--text-secondary)">Bugün</span><span style="font-size:13px;font-weight:700;color:var(--text)">${s.todayCompleted}/${s.todayTotal} transfer</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg);border-radius:8px"><span style="font-size:12px;color:var(--text-secondary)">Online Süre</span><span style="font-size:13px;font-weight:700;color:var(--text)">${hrs}s ${mins}dk</span></div>
+            <a href="/api/track/${encodeURIComponent(driver.phone)}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;margin-top:4px"><span class="material-icons" style="font-size:16px">share_location</span>Canlı Takip Linki</a>
+          </div>
+        </div>
+        <div id="statsOverlay" onclick="document.getElementById('statsPanel').remove();this.remove()" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:2999"></div>
+      `)}catch(e){showToast('Performans verileri yüklenemedi','error')}
     }
   </script>
 </body>
