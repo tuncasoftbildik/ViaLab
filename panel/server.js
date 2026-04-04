@@ -369,6 +369,146 @@ app.delete('/api/booking-drivers/:driverId', async (req, res) => {
   }
 });
 
+// ============================================
+// Isı Haritası — pickup/dropoff koordinatları
+// ============================================
+app.get('/api/heatmap', async (req, res) => {
+  try {
+    const token = await getToken();
+    const statuses = 'NEW,ACCEPTED,DRIVER_ASSIGNED,COMPLETED';
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/bookings?status=${statuses}&size=500`, {
+      headers: {Authorization: token},
+    });
+    const data = await apiRes.json();
+    const bookings = data?.bookings || data || [];
+
+    const points = [];
+    bookings.forEach(b => {
+      if (b.pickup?.latitude && b.pickup?.longitude) {
+        points.push({lat: b.pickup.latitude, lng: b.pickup.longitude, type: 'pickup'});
+      }
+      if (b.dropoff?.latitude && b.dropoff?.longitude) {
+        points.push({lat: b.dropoff.latitude, lng: b.dropoff.longitude, type: 'dropoff'});
+      }
+    });
+    res.json(points);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// ============================================
+// Sürücü Performans
+// ============================================
+app.get('/api/driver-stats/:phone', async (req, res) => {
+  try {
+    const token = await getToken();
+    const phone = req.params.phone;
+    const statuses = 'NEW,ACCEPTED,DRIVER_ASSIGNED,COMPLETED,CANCELLED,NO_SHOW';
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/bookings?status=${statuses}&size=500`, {
+      headers: {Authorization: token},
+    });
+    const data = await apiRes.json();
+    const bookings = data?.bookings || data || [];
+
+    const mine = bookings.filter(b => b.driver_assigned?.telephone_number === phone);
+    const completed = mine.filter(b => b.status === 'COMPLETED').length;
+    const cancelled = mine.filter(b => b.status === 'CANCELLED').length;
+    const noShow = mine.filter(b => b.status === 'NO_SHOW').length;
+    const active = mine.filter(b => ['NEW', 'ACCEPTED', 'DRIVER_ASSIGNED'].includes(b.status)).length;
+    const total = mine.length;
+
+    // Bugünkü transferler
+    const today = new Date().toISOString().slice(0, 10);
+    const todayBookings = mine.filter(b => b.pickup_date_time?.startsWith(today));
+
+    // Konum verilerinden online süre hesapla (bugün)
+    const driver = Array.from(drivers.values()).find(d => d.phone === phone);
+    let onlineMinutes = 0;
+    if (driver) {
+      const todayStart = Date.now() - (new Date().getHours() * 3600000 + new Date().getMinutes() * 60000);
+      const trackResult = await db.execute({
+        sql: 'SELECT COUNT(*) as cnt FROM driver_locations WHERE driver_id = ? AND created_at > ?',
+        args: [driver.driverId, todayStart],
+      });
+      // Her konum noktası ~30sn aralıkla gelir
+      onlineMinutes = Math.round((trackResult.rows[0]?.cnt || 0) * 0.5);
+    }
+
+    res.json({
+      total, completed, cancelled, noShow, active,
+      todayTotal: todayBookings.length,
+      todayCompleted: todayBookings.filter(b => b.status === 'COMPLETED').length,
+      completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      onlineMinutesToday: onlineMinutes,
+    });
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// ============================================
+// Canlı Transfer Takibi (yolcu linki)
+// ============================================
+app.get('/api/track/:phone', (req, res) => {
+  const phone = req.params.phone;
+  const driver = Array.from(drivers.values()).find(d => d.phone === phone);
+  const booking = driverBookings.get(phone);
+
+  res.send(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ViaGo Transfer Takip</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#f5f5f5}
+#map{height:60vh;width:100%}
+.info{padding:16px;background:#fff;border-radius:16px 16px 0 0;margin-top:-16px;position:relative;z-index:400}
+.driver-name{font-size:18px;font-weight:800;color:#1a1a2e}
+.detail{font-size:13px;color:#666;margin-top:4px;display:flex;align-items:center;gap:6px}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;color:#fff;background:#43A047}
+.route{margin-top:12px;padding:12px;background:#f9f9f9;border-radius:12px}
+.route-point{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.line{width:2px;height:16px;background:#ddd;margin-left:4px}
+</style>
+</head><body>
+<div id="map"></div>
+<div class="info">
+  ${driver ? `
+    <div class="driver-name">${driver.firstName} ${driver.lastName}</div>
+    <div class="detail"><span class="badge">${driver.online ? 'Yolda' : 'Bekleniyor'}</span> ${Math.round(driver.speed)} km/s</div>
+  ` : '<div class="driver-name">Sürücü bilgisi bekleniyor...</div>'}
+  ${booking ? `
+    <div class="route">
+      <div class="route-point"><div class="dot" style="background:#43A047"></div> ${booking.pickup?.establishment_name || booking.pickup?.address || ''}</div>
+      <div style="margin-left:4px"><div class="line"></div></div>
+      <div class="route-point"><div class="dot" style="background:#E53935"></div> ${booking.dropoff?.establishment_name || booking.dropoff?.address || ''}</div>
+    </div>
+  ` : ''}
+</div>
+<script>
+const map=L.map('map').setView([${driver ? `${driver.latitude},${driver.longitude}` : '41.0082,28.9784'}],14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+${driver ? `
+let marker=L.marker([${driver.latitude},${driver.longitude}],{
+  icon:L.divIcon({className:'',html:'<div style="width:32px;height:32px;border-radius:50%;background:#43A047;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px">🚗</div>',iconSize:[32,32],iconAnchor:[16,16]})
+}).addTo(map);
+setInterval(async()=>{
+  try{
+    const r=await fetch('/api/drivers');
+    const all=await r.json();
+    const d=all.find(x=>x.phone==='${phone}');
+    if(d){marker.setLatLng([d.latitude,d.longitude]);map.panTo([d.latitude,d.longitude])}
+  }catch(e){}
+},10000);
+` : ''}
+</script>
+</body></html>`);
+});
+
 // Bildirim gönder
 app.post('/api/notify', (req, res) => {
   const {driverId, title, message, type} = req.body;

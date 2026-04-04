@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://unpkg.com/leaflet.gridlayer.googlemutant@0.14.1/dist/Leaflet.GoogleMutant.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCscDJMy4GTEP_Mv-SBu3H7iadRBUzstvY"></script>
   <script src="/socket.io/socket.io.js"></script>
@@ -203,6 +204,7 @@
     .fab:hover { transform: scale(1.1); }
     .fab-drivers { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; }
     .fab-notify { background: linear-gradient(135deg, #E53935, #C62828); color: #fff; }
+    .fab-heat { background: linear-gradient(135deg, #FF6F00, #E65100); color: #fff; }
     .fab-center { background: #fff; color: #333; }
 
     /* Toast */
@@ -282,6 +284,9 @@
         <div class="fab-container">
           <button class="fab fab-drivers" onclick="toggleDriverPanel()" title="Sürücü Yönetimi">
             <span class="material-icons">person_add</span>
+          </button>
+          <button class="fab fab-heat" onclick="toggleHeatmap()" title="Isı Haritası">
+            <span class="material-icons">whatshot</span>
           </button>
           <button class="fab fab-notify" onclick="toggleNotifyPanel()" title="Bildirim Gönder">
             <span class="material-icons">notifications</span>
@@ -547,6 +552,7 @@
                 <span class="driver-time">${ago}</span>
               </div>
             </div>
+            <span class="material-icons" onclick="event.stopPropagation();showDriverStats(driverData.get('${d.driverId}'))" style="font-size:20px;color:#999;cursor:pointer;padding:4px" title="Performans">bar_chart</span>
           </div>
         `;
       }).join('');
@@ -979,6 +985,115 @@
           updateDriverList();
         });
     }, 30000);
+
+    // ========================================
+    // ISI HARİTASI
+    // ========================================
+    let heatLayer = null;
+    let heatActive = false;
+
+    async function toggleHeatmap() {
+      if (heatActive) {
+        if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+        heatActive = false;
+        showToast('Isı haritası kapatıldı', 'info');
+        return;
+      }
+
+      try {
+        showToast('Isı haritası yükleniyor...', 'info');
+        const res = await fetch('/api/heatmap');
+        const points = await res.json();
+
+        if (points.length === 0) {
+          showToast('Heatmap verisi yok', 'error');
+          return;
+        }
+
+        const heatData = points.map(p => [p.lat, p.lng, 0.6]);
+        heatLayer = L.heatLayer(heatData, {
+          radius: 25,
+          blur: 15,
+          maxZoom: 17,
+          max: 1.0,
+          gradient: {0.2: '#2196F3', 0.4: '#4CAF50', 0.6: '#FFEB3B', 0.8: '#FF9800', 1.0: '#E53935'},
+        }).addTo(map);
+
+        heatActive = true;
+        showToast(`Isı haritası: ${points.length} nokta`, 'success');
+      } catch (err) {
+        showToast('Isı haritası yüklenemedi', 'error');
+      }
+    }
+
+    // ========================================
+    // SÜRÜCÜ PERFORMANS PANELİ
+    // ========================================
+    async function showDriverStats(driver) {
+      try {
+        const res = await fetch('/api/driver-stats/' + encodeURIComponent(driver.phone));
+        const s = await res.json();
+
+        const onlineHrs = Math.floor(s.onlineMinutesToday / 60);
+        const onlineMins = s.onlineMinutesToday % 60;
+
+        const statsHtml = `
+          <div style="position:absolute;top:80px;left:380px;width:320px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);z-index:1000;overflow:hidden" id="statsPanel">
+            <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:16px;font-weight:700">${driver.firstName} ${driver.lastName}</div>
+                <div style="font-size:11px;opacity:0.7">Performans</div>
+              </div>
+              <button onclick="document.getElementById('statsPanel').remove()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer">&times;</button>
+            </div>
+            <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div style="background:#E8F5E9;padding:12px;border-radius:12px;text-align:center">
+                <div style="font-size:24px;font-weight:800;color:#2E7D32">${s.completed}</div>
+                <div style="font-size:11px;color:#666">Tamamlanan</div>
+              </div>
+              <div style="background:#FFF3E0;padding:12px;border-radius:12px;text-align:center">
+                <div style="font-size:24px;font-weight:800;color:#E65100">${s.active}</div>
+                <div style="font-size:11px;color:#666">Aktif</div>
+              </div>
+              <div style="background:#FFEBEE;padding:12px;border-radius:12px;text-align:center">
+                <div style="font-size:24px;font-weight:800;color:#C62828">${s.cancelled}</div>
+                <div style="font-size:11px;color:#666">İptal</div>
+              </div>
+              <div style="background:#E3F2FD;padding:12px;border-radius:12px;text-align:center">
+                <div style="font-size:24px;font-weight:800;color:#1565C0">${s.total}</div>
+                <div style="font-size:11px;color:#666">Toplam</div>
+              </div>
+            </div>
+            <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f9f9f9;border-radius:10px">
+                <span style="font-size:12px;color:#666">Başarı Oranı</span>
+                <span style="font-size:13px;font-weight:700;color:${s.completionRate >= 80 ? '#2E7D32' : s.completionRate >= 50 ? '#E65100' : '#C62828'}">%${s.completionRate}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f9f9f9;border-radius:10px">
+                <span style="font-size:12px;color:#666">Bugün</span>
+                <span style="font-size:13px;font-weight:700;color:#1a1a2e">${s.todayCompleted}/${s.todayTotal} transfer</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f9f9f9;border-radius:10px">
+                <span style="font-size:12px;color:#666">Online Süre (Bugün)</span>
+                <span style="font-size:13px;font-weight:700;color:#1a1a2e">${onlineHrs}s ${onlineMins}dk</span>
+              </div>
+              <a href="/api/track/${encodeURIComponent(driver.phone)}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:linear-gradient(135deg,#43A047,#2E7D32);color:#fff;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;margin-top:4px">
+                <span class="material-icons" style="font-size:16px">share_location</span>
+                Canlı Takip Linki
+              </a>
+            </div>
+          </div>
+        `;
+
+        // Önceki paneli kaldır
+        const old = document.getElementById('statsPanel');
+        if (old) old.remove();
+
+        document.body.insertAdjacentHTML('beforeend', statsHtml);
+      } catch (err) {
+        showToast('Performans verileri yüklenemedi', 'error');
+      }
+    }
   </script>
 </body>
 </html>
