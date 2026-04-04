@@ -742,7 +742,7 @@
 
     // ========== DRIVER STATS ==========
     async function showDriverStats(driver) {
-      try{const r=await fetch('/api/driver-stats/'+encodeURIComponent(driver.phone));const s=await r.json();const hrs=Math.floor(s.onlineMinutesToday/60),mins=s.onlineMinutesToday%60;
+      try{const r=await fetch('/api/driver-stats/'+encodeURIComponent(driver.phone));const raw=await r.json();const s={completed:raw.completed||0,active:raw.active||0,cancelled:raw.cancelled||0,noShow:raw.noShow||0,total:raw.total||0,completionRate:raw.completionRate||0,todayCompleted:raw.todayCompleted||0,todayTotal:raw.todayTotal||0,onlineMinutesToday:raw.onlineMinutesToday||0};const hrs=Math.floor(s.onlineMinutesToday/60),mins=s.onlineMinutesToday%60;
       const old=document.getElementById('statsPanel');if(old)old.remove();
       document.body.insertAdjacentHTML('beforeend',`
         <div id="statsPanel" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:340px;max-width:calc(100vw - 32px);background:var(--surface);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.2);z-index:3000;overflow:hidden">
