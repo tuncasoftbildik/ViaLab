@@ -119,8 +119,9 @@ app.post('/api/location', (req, res) => {
 app.get('/api/drivers', (req, res) => {
   const driverList = Array.from(drivers.values());
   const now = Date.now();
+  // Her zaman lastUpdate'e göre online durumunu belirle (socket disconnect override'ını düzelt)
   driverList.forEach(d => {
-    if (now - d.lastUpdate > 2 * 60 * 1000) d.online = false;
+    d.online = (now - d.lastUpdate) <= 2 * 60 * 1000;
   });
   res.json(driverList);
 });
@@ -284,8 +285,12 @@ io.on('connection', (socket) => {
       driverSockets.delete(data.driverId);
       const driver = drivers.get(data.driverId);
       if (driver) {
-        driver.online = false;
-        io.to('panel').emit('driverUpdate', driver);
+        // Son 2 dk içinde HTTP konum geldiyse hâlâ online say (socket kopsa bile)
+        const isRecentlyActive = (Date.now() - driver.lastUpdate) <= 2 * 60 * 1000;
+        if (!isRecentlyActive) {
+          driver.online = false;
+          io.to('panel').emit('driverUpdate', driver);
+        }
       }
       console.log('Sürücü ayrıldı:', data.driverId);
     });
