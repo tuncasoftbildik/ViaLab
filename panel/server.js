@@ -120,7 +120,7 @@ app.get('/api/drivers', (req, res) => {
   const driverList = Array.from(drivers.values());
   const now = Date.now();
   driverList.forEach(d => {
-    if (now - d.lastUpdate > 5 * 60 * 1000) d.online = false;
+    if (now - d.lastUpdate > 2 * 60 * 1000) d.online = false;
   });
   res.json(driverList);
 });
