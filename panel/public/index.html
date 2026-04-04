@@ -247,7 +247,15 @@
       <div class="history-panel" id="historyPanel">
         <div class="history-header">
           <h4 id="historyTitle">Sürücü Geçmişi</h4>
-          <button class="history-close" onclick="closeHistory()">&times;</button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select id="historyDays" onchange="reloadHistory()" style="font-size:11px;padding:4px 8px;border:1px solid #e0e0e0;border-radius:6px;background:#fff;font-weight:600;color:#333">
+              <option value="1">Bugün</option>
+              <option value="3">3 Gün</option>
+              <option value="7">7 Gün</option>
+              <option value="30">30 Gün</option>
+            </select>
+            <button class="history-close" onclick="closeHistory()">&times;</button>
+          </div>
         </div>
         <div id="historyList"></div>
       </div>
@@ -365,6 +373,7 @@
     let notifyType = 'info';
     let activeTrackLine = null;
     let activeTrackMarkers = [];
+    let currentHistoryDriver = null;
 
     // Sürücü ikonu
     const createDriverIcon = (online, heading) => {
@@ -565,10 +574,16 @@
       clearTrack();
     }
 
+    function reloadHistory() {
+      if (currentHistoryDriver) loadDriverHistory(currentHistoryDriver);
+    }
+
     async function loadDriverHistory(driver) {
+      currentHistoryDriver = driver;
       const panel = document.getElementById('historyPanel');
       const list = document.getElementById('historyList');
       const title = document.getElementById('historyTitle');
+      const days = document.getElementById('historyDays').value;
 
       title.textContent = `${driver.firstName} ${driver.lastName}`;
       list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">Yükleniyor...</div>';
@@ -577,7 +592,7 @@
 
       // Konum geçmişi + booking geçmişi paralel çek
       const [trackRes, bookingRes] = await Promise.all([
-        fetch('/api/driver-track/' + encodeURIComponent(driver.driverId)).then(r => r.json()).catch(() => []),
+        fetch(`/api/driver-track/${encodeURIComponent(driver.driverId)}?days=${days}`).then(r => r.json()).catch(() => []),
         fetch('/api/driver-history/' + encodeURIComponent(driver.phone)).then(r => r.json()).catch(() => []),
       ]);
 
@@ -642,7 +657,7 @@
           <div style="padding:12px 16px;background:#fff;border-bottom:1px solid #f0f0f0">
             <div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:6px">
               <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#E53935">route</span>
-              Konum Geçmişi (Son 24 Saat)
+              Konum Geçmişi (${days == 1 ? 'Bugün' : 'Son ' + days + ' Gün'})
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap">
               <div style="font-size:11px;color:#666"><strong>${totalPoints}</strong> konum noktası</div>
@@ -662,7 +677,7 @@
           </div>
         `;
       } else {
-        html += '<div style="padding:16px;text-align:center;color:#999;font-size:12px"><span class="material-icons" style="font-size:14px;vertical-align:middle">route</span> Henüz konum verisi yok (sunucu yeniden başladığında sıfırlanır)</div>';
+        html += '<div style="padding:16px;text-align:center;color:#999;font-size:12px"><span class="material-icons" style="font-size:14px;vertical-align:middle">route</span> Bu dönemde konum verisi yok</div>';
       }
 
       // === BOOKING GEÇMİŞİ ===

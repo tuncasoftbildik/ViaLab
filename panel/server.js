@@ -3,6 +3,7 @@ const http = require('http');
 const {Server} = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const {createClient} = require('@libsql/client');
 
 const app = express();
 app.use(cors());
@@ -12,6 +13,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {origin: '*'},
+});
+
+// Turso DB (konum geçmişi)
+const db = createClient({
+  url: process.env.TURSO_URL || 'libsql://viago-panel-tuncasoftbildik.aws-eu-west-1.turso.io',
+  authToken: process.env.TURSO_AUTH_TOKEN || '',
 });
 
 // Booking.com API ayarları (Render environment variables)
@@ -87,15 +94,6 @@ setInterval(fetchBookings, 60000);
 // Sürücü verileri
 const drivers = new Map();
 const driverSockets = new Map();
-const driverTracks = new Map(); // driverId -> [{lat, lng, speed, heading, timestamp}]
-
-// Konum geçmişi: 24 saatten eskilerini temizle
-function pruneTrack(track) {
-  const cutoff = Date.now() - 24 * 3600000;
-  while (track.length > 0 && track[0].ts < cutoff) track.shift();
-  return track;
-}
-
 // Sürücü konum güncelleme
 app.post('/api/location', (req, res) => {
   const {driverId, firstName, lastName, phone, latitude, longitude, speed, heading, timestamp} = req.body;
@@ -120,27 +118,32 @@ app.post('/api/location', (req, res) => {
 
   drivers.set(driverId, driverData);
 
-  // Konum geçmişine ekle
-  if (!driverTracks.has(driverId)) driverTracks.set(driverId, []);
-  const track = driverTracks.get(driverId);
-  track.push({
-    lat: latitude,
-    lng: longitude,
-    speed: speed || 0,
-    heading: heading || 0,
-    ts: Date.now(),
-    timestamp: driverData.timestamp,
-  });
-  pruneTrack(track);
+  // Konum geçmişini Turso'ya kaydet
+  db.execute({
+    sql: 'INSERT INTO driver_locations (driver_id, latitude, longitude, speed, heading, timestamp, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    args: [driverId, latitude, longitude, speed || 0, heading || 0, driverData.timestamp, Date.now()],
+  }).catch(err => console.log('DB kayıt hatası:', err.message));
 
   io.to('panel').emit('driverUpdate', driverData);
   res.json({success: true});
 });
 
-// Sürücü konum geçmişi
-app.get('/api/driver-track/:driverId', (req, res) => {
-  const track = driverTracks.get(req.params.driverId) || [];
-  res.json(pruneTrack(track));
+// Sürücü konum geçmişi (Turso'dan)
+app.get('/api/driver-track/:driverId', async (req, res) => {
+  try {
+    const driverId = req.params.driverId;
+    const days = parseInt(req.query.days) || 1; // varsayılan 1 gün, max 30
+    const cutoff = Date.now() - Math.min(days, 30) * 24 * 3600000;
+
+    const result = await db.execute({
+      sql: 'SELECT latitude as lat, longitude as lng, speed, heading, timestamp, created_at as ts FROM driver_locations WHERE driver_id = ? AND created_at > ? ORDER BY created_at ASC',
+      args: [driverId, cutoff],
+    });
+
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
 });
 
 // Tüm sürücüleri getir
