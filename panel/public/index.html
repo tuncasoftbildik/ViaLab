@@ -336,7 +336,8 @@
               <input type="text" class="notify-input" id="driverFirstName" placeholder="Ad" style="flex:1;margin:0">
               <input type="text" class="notify-input" id="driverLastName" placeholder="Soyad" style="flex:1;margin:0">
             </div>
-            <input type="text" class="notify-input" id="driverPhone" placeholder="Telefon (+905...)" style="margin:0 0 12px 0">
+            <input type="text" class="notify-input" id="driverPhone" placeholder="Telefon (+905...)" style="margin:0 0 8px 0">
+            <input type="password" class="notify-input" id="driverPassword" placeholder="Şifre (min 4 karakter)" style="margin:0 0 12px 0">
             <button class="notify-send" style="background:#43A047" onclick="createDriver()">
               <span class="material-icons" style="font-size:18px;vertical-align:middle">person_add</span>
               Sürücü Ekle
@@ -860,10 +861,16 @@
               <div style="font-size:13px;font-weight:600;color:#333">${d.first_name} ${d.last_name}</div>
               <div style="font-size:11px;color:#999">${d.telephone_number}</div>
             </div>
-            <button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
-              style="background:#FFEBEE;border:none;color:#E53935;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
-              <span class="material-icons" style="font-size:14px">delete</span> Sil
-            </button>
+            <div style="display:flex;gap:6px">
+              <button onclick="changePassword('${d.telephone_number}','${d.first_name} ${d.last_name}')"
+                style="background:#E3F2FD;border:none;color:#1565C0;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+                <span class="material-icons" style="font-size:14px">key</span> Şifre
+              </button>
+              <button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
+                style="background:#FFEBEE;border:none;color:#E53935;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+                <span class="material-icons" style="font-size:14px">delete</span> Sil
+              </button>
+            </div>
           </div>
         `).join('');
       } catch (err) {
@@ -875,9 +882,14 @@
       const firstName = document.getElementById('driverFirstName').value.trim();
       const lastName = document.getElementById('driverLastName').value.trim();
       const phone = document.getElementById('driverPhone').value.trim();
+      const password = document.getElementById('driverPassword').value.trim();
 
       if (!firstName || !lastName || !phone) {
         showToast('Ad, soyad ve telefon gerekli', 'error');
+        return;
+      }
+      if (!password || password.length < 4) {
+        showToast('Şifre en az 4 karakter olmalı', 'error');
         return;
       }
 
@@ -888,16 +900,45 @@
           body: JSON.stringify({first_name: firstName, last_name: lastName, telephone_number: phone}),
         });
         if (res.status === 201) {
+          // Şifreyi de kaydet
+          await fetch('/api/driver-password', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({phone, password}),
+          });
           showToast(`${firstName} ${lastName} eklendi!`, 'success');
           document.getElementById('driverFirstName').value = '';
           document.getElementById('driverLastName').value = '';
           document.getElementById('driverPhone').value = '';
+          document.getElementById('driverPassword').value = '';
           loadBookingDrivers();
         } else if (res.status === 409) {
           showToast('Bu telefon numarası zaten kayıtlı', 'error');
         } else {
           const data = await res.json();
           showToast(data.error || 'Eklenemedi', 'error');
+        }
+      } catch (err) {
+        showToast('Bağlantı hatası', 'error');
+      }
+    }
+
+    async function changePassword(phone, name) {
+      const newPassword = prompt(`${name} için yeni şifre girin (min 4 karakter):`);
+      if (!newPassword || newPassword.length < 4) {
+        if (newPassword !== null) showToast('Şifre en az 4 karakter olmalı', 'error');
+        return;
+      }
+      try {
+        const res = await fetch('/api/driver-password', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({phone, password: newPassword}),
+        });
+        if (res.ok) {
+          showToast(`${name} şifresi güncellendi`, 'success');
+        } else {
+          showToast('Şifre güncellenemedi', 'error');
         }
       } catch (err) {
         showToast('Bağlantı hatası', 'error');

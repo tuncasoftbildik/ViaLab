@@ -3,6 +3,7 @@ const http = require('http');
 const {Server} = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const {createClient} = require('@libsql/client');
 
 const app = express();
@@ -218,6 +219,77 @@ app.get('/api/driver-history/:phone', async (req, res) => {
     );
 
     res.json(driverBookings);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// ============================================
+// Şifre Yönetimi
+// ============================================
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+// Sürücü login (uygulama kullanır)
+app.post('/api/login', async (req, res) => {
+  const {phone, password} = req.body;
+  if (!phone || !password) {
+    return res.status(400).json({error: 'Telefon ve şifre gerekli'});
+  }
+
+  try {
+    // Şifreyi DB'den kontrol et
+    const result = await db.execute({
+      sql: 'SELECT password_hash FROM driver_passwords WHERE phone = ?',
+      args: [phone],
+    });
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({error: 'Bu numaraya kayıtlı şifre bulunamadı'});
+    }
+
+    const storedHash = result.rows[0].password_hash;
+    if (hashPassword(password) !== storedHash) {
+      return res.status(401).json({error: 'Şifre yanlış'});
+    }
+
+    // Booking.com API'den sürücü bilgilerini getir
+    const token = await getToken();
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/drivers`, {
+      headers: {Authorization: token},
+    });
+    const data = await apiRes.json();
+    const drivers = data?.drivers || data || [];
+    const driver = drivers.find(d => d.telephone_number === phone);
+
+    if (!driver) {
+      return res.status(404).json({error: 'Booking.com sisteminde sürücü bulunamadı'});
+    }
+
+    res.json({success: true, driver});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Şifre belirle/güncelle (panel kullanır)
+app.post('/api/driver-password', async (req, res) => {
+  const {phone, password} = req.body;
+  if (!phone || !password) {
+    return res.status(400).json({error: 'Telefon ve şifre gerekli'});
+  }
+  if (password.length < 4) {
+    return res.status(400).json({error: 'Şifre en az 4 karakter olmalı'});
+  }
+
+  try {
+    await db.execute({
+      sql: 'INSERT OR REPLACE INTO driver_passwords (phone, password_hash, created_at) VALUES (?, ?, ?)',
+      args: [phone, hashPassword(password), Date.now()],
+    });
+    res.json({success: true});
   } catch (error) {
     res.status(500).json({error: error.message});
   }
