@@ -87,6 +87,14 @@ setInterval(fetchBookings, 60000);
 // Sürücü verileri
 const drivers = new Map();
 const driverSockets = new Map();
+const driverTracks = new Map(); // driverId -> [{lat, lng, speed, heading, timestamp}]
+
+// Konum geçmişi: 24 saatten eskilerini temizle
+function pruneTrack(track) {
+  const cutoff = Date.now() - 24 * 3600000;
+  while (track.length > 0 && track[0].ts < cutoff) track.shift();
+  return track;
+}
 
 // Sürücü konum güncelleme
 app.post('/api/location', (req, res) => {
@@ -111,8 +119,28 @@ app.post('/api/location', (req, res) => {
   };
 
   drivers.set(driverId, driverData);
+
+  // Konum geçmişine ekle
+  if (!driverTracks.has(driverId)) driverTracks.set(driverId, []);
+  const track = driverTracks.get(driverId);
+  track.push({
+    lat: latitude,
+    lng: longitude,
+    speed: speed || 0,
+    heading: heading || 0,
+    ts: Date.now(),
+    timestamp: driverData.timestamp,
+  });
+  pruneTrack(track);
+
   io.to('panel').emit('driverUpdate', driverData);
   res.json({success: true});
+});
+
+// Sürücü konum geçmişi
+app.get('/api/driver-track/:driverId', (req, res) => {
+  const track = driverTracks.get(req.params.driverId) || [];
+  res.json(pruneTrack(track));
 });
 
 // Tüm sürücüleri getir
