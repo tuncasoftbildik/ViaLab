@@ -163,6 +163,80 @@ app.get('/api/bookings', async (req, res) => {
   }
 });
 
+// ============================================
+// Sürücü Yönetimi (Booking.com API)
+// ============================================
+
+// Booking.com API'den tüm sürücüleri getir
+app.get('/api/booking-drivers', async (req, res) => {
+  try {
+    const token = await getToken();
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/drivers`, {
+      headers: {Authorization: token},
+    });
+    const data = await apiRes.json();
+    res.json(data?.drivers || data || []);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Yeni sürücü oluştur
+app.post('/api/booking-drivers', async (req, res) => {
+  try {
+    const {first_name, last_name, telephone_number} = req.body;
+    if (!first_name || !last_name || !telephone_number) {
+      return res.status(400).json({error: 'Ad, soyad ve telefon gerekli'});
+    }
+
+    const token = await getToken();
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/drivers`, {
+      method: 'POST',
+      headers: {
+        Authorization: token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        first_name,
+        last_name,
+        telephone_number,
+        supplier_location_ids: ['107939'],
+      }),
+    });
+
+    const data = await apiRes.json();
+    if (apiRes.status === 201) {
+      res.status(201).json(data);
+    } else if (apiRes.status === 409) {
+      res.status(409).json({error: 'Bu telefon numarasıyla kayıtlı sürücü zaten var'});
+    } else {
+      res.status(apiRes.status).json(data);
+    }
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Sürücü sil
+app.delete('/api/booking-drivers/:driverId', async (req, res) => {
+  try {
+    const token = await getToken();
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/drivers/${req.params.driverId}`, {
+      method: 'DELETE',
+      headers: {Authorization: token},
+    });
+
+    if (apiRes.status === 200) {
+      res.json({success: true});
+    } else {
+      const data = await apiRes.json().catch(() => ({}));
+      res.status(apiRes.status).json(data);
+    }
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
 // Bildirim gönder
 app.post('/api/notify', (req, res) => {
   const {driverId, title, message, type} = req.body;

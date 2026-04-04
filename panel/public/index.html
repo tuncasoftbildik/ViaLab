@@ -156,6 +156,7 @@
       transition: transform 0.2s;
     }
     .fab:hover { transform: scale(1.1); }
+    .fab-drivers { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; }
     .fab-notify { background: linear-gradient(135deg, #E53935, #C62828); color: #fff; }
     .fab-center { background: #fff; color: #333; }
 
@@ -219,6 +220,9 @@
 
         <!-- FAB Buttons -->
         <div class="fab-container">
+          <button class="fab fab-drivers" onclick="toggleDriverPanel()" title="Sürücü Yönetimi">
+            <span class="material-icons">person_add</span>
+          </button>
           <button class="fab fab-notify" onclick="toggleNotifyPanel()" title="Bildirim Gönder">
             <span class="material-icons">notifications</span>
           </button>
@@ -257,6 +261,32 @@
               <span class="material-icons" style="font-size:18px;vertical-align:middle">send</span>
               Gönder
             </button>
+          </div>
+        </div>
+      </div>
+
+        <!-- Driver Management Panel -->
+        <div class="notify-panel" id="driverPanel" style="top:80px;right:20px;width:380px">
+          <div class="notify-header" style="background:#1a1a2e">
+            <h3>Sürücü Yönetimi</h3>
+            <button class="notify-close" onclick="toggleDriverPanel()">&times;</button>
+          </div>
+          <div class="notify-body">
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <input type="text" class="notify-input" id="driverFirstName" placeholder="Ad" style="flex:1;margin:0">
+              <input type="text" class="notify-input" id="driverLastName" placeholder="Soyad" style="flex:1;margin:0">
+            </div>
+            <input type="text" class="notify-input" id="driverPhone" placeholder="Telefon (+905...)" style="margin:0 0 12px 0">
+            <button class="notify-send" style="background:#43A047" onclick="createDriver()">
+              <span class="material-icons" style="font-size:18px;vertical-align:middle">person_add</span>
+              Sürücü Ekle
+            </button>
+            <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
+              <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px">Kayıtlı Sürücüler</div>
+              <div id="bookingDriverList" style="max-height:300px;overflow-y:auto">
+                <div style="color:#999;font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -559,6 +589,89 @@
       toast.textContent = msg;
       toast.className = `toast ${type} show`;
       setTimeout(() => toast.className = 'toast', 3000);
+    }
+
+    // ============================================
+    // Sürücü Yönetimi
+    // ============================================
+    function toggleDriverPanel() {
+      document.getElementById('driverPanel').classList.toggle('active');
+      loadBookingDrivers();
+    }
+
+    async function loadBookingDrivers() {
+      const list = document.getElementById('bookingDriverList');
+      list.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>';
+      try {
+        const res = await fetch('/api/booking-drivers');
+        const drivers = await res.json();
+        if (drivers.length === 0) {
+          list.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';
+          return;
+        }
+        list.innerHTML = drivers.map(d => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#333">${d.first_name} ${d.last_name}</div>
+              <div style="font-size:11px;color:#999">${d.telephone_number}</div>
+            </div>
+            <button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
+              style="background:#FFEBEE;border:none;color:#E53935;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+              <span class="material-icons" style="font-size:14px">delete</span> Sil
+            </button>
+          </div>
+        `).join('');
+      } catch (err) {
+        list.innerHTML = '<div style="color:#E53935;font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>';
+      }
+    }
+
+    async function createDriver() {
+      const firstName = document.getElementById('driverFirstName').value.trim();
+      const lastName = document.getElementById('driverLastName').value.trim();
+      const phone = document.getElementById('driverPhone').value.trim();
+
+      if (!firstName || !lastName || !phone) {
+        showToast('Ad, soyad ve telefon gerekli', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/booking-drivers', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({first_name: firstName, last_name: lastName, telephone_number: phone}),
+        });
+        if (res.status === 201) {
+          showToast(`${firstName} ${lastName} eklendi!`, 'success');
+          document.getElementById('driverFirstName').value = '';
+          document.getElementById('driverLastName').value = '';
+          document.getElementById('driverPhone').value = '';
+          loadBookingDrivers();
+        } else if (res.status === 409) {
+          showToast('Bu telefon numarası zaten kayıtlı', 'error');
+        } else {
+          const data = await res.json();
+          showToast(data.error || 'Eklenemedi', 'error');
+        }
+      } catch (err) {
+        showToast('Bağlantı hatası', 'error');
+      }
+    }
+
+    async function deleteBookingDriver(driverId, name) {
+      if (!confirm(`${name} silinsin mi?`)) return;
+      try {
+        const res = await fetch(`/api/booking-drivers/${driverId}`, {method: 'DELETE'});
+        if (res.ok) {
+          showToast(`${name} silindi`, 'success');
+          loadBookingDrivers();
+        } else {
+          showToast('Silinemedi', 'error');
+        }
+      } catch (err) {
+        showToast('Bağlantı hatası', 'error');
+      }
     }
 
     // Sayfa yüklenince sürücüleri çek
