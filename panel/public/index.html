@@ -428,6 +428,7 @@
           <div class="header-badge">PANEL</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
+          <span id="userBadge" style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
           <button onclick="panelLogout()" style="background:rgba(255,255,255,0.1);border:none;color:rgba(255,255,255,0.7);padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;font-family:inherit" title="Çıkış Yap">
             <span class="material-icons" style="font-size:16px">logout</span>
           </button>
@@ -511,6 +512,37 @@
           <button class="fab fab-center" onclick="centerMap()" title="Haritayı Ortala">
             <span class="material-icons">my_location</span>
           </button>
+          <button class="fab" id="fabAdmins" onclick="toggleAdminPanel()" title="Admin Yönetimi" style="display:none;background:linear-gradient(135deg,#6366F1,#4F46E5)">
+            <span class="material-icons">admin_panel_settings</span>
+          </button>
+        </div>
+
+        <!-- Admin Management Panel -->
+        <div class="overlay-panel" id="adminPanel">
+          <div class="panel-header" style="background:linear-gradient(135deg,#6366F1,#4F46E5)">
+            <h3>Admin Yönetimi</h3>
+            <button class="panel-close" onclick="toggleAdminPanel()">&times;</button>
+          </div>
+          <div class="panel-body">
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <input type="text" class="input" id="adminName" placeholder="Ad Soyad" style="flex:1">
+            </div>
+            <input type="email" class="input" id="adminEmail" placeholder="Email adresi" style="margin-bottom:8px">
+            <input type="password" class="input" id="adminPassword" placeholder="Şifre (min 6 karakter)" style="margin-bottom:8px">
+            <select class="input" id="adminRole" style="margin-bottom:12px">
+              <option value="admin">Admin — Tam yetki</option>
+              <option value="viewer">Viewer — Sadece görüntüleme</option>
+            </select>
+            <button class="btn btn-primary" style="background:linear-gradient(135deg,#6366F1,#4F46E5)" onclick="createAdmin()">
+              <span class="material-icons" style="font-size:18px">person_add</span> Admin Ekle
+            </button>
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">Kayıtlı Adminler</div>
+              <div id="adminList" style="max-height:300px;overflow-y:auto">
+                <div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Notification Panel -->
@@ -586,6 +618,24 @@
 
   <script>
     // ========== AUTH ==========
+    let currentUser = {name: '', role: '', email: ''};
+    function authHeaders() { return {'Authorization': 'Bearer ' + (sessionStorage.getItem('panelToken') || '')}; }
+
+    function applyRole() {
+      // Superadmin'e özel butonlar
+      const isSuperAdmin = currentUser.role === 'superadmin';
+      document.getElementById('fabAdmins').style.display = isSuperAdmin ? 'flex' : 'none';
+      // Viewer kısıtlamaları — sadece görüntüleme
+      const isViewer = currentUser.role === 'viewer';
+      document.querySelectorAll('.fab-drivers,.fab-notify').forEach(el => el.style.display = isViewer ? 'none' : 'flex');
+      // Header'da kullanıcı bilgisi
+      const badge = document.getElementById('userBadge');
+      if (badge) {
+        const roleLabels = {superadmin: 'Super Admin', admin: 'Admin', viewer: 'Viewer'};
+        badge.textContent = `${currentUser.name} — ${roleLabels[currentUser.role] || currentUser.role}`;
+      }
+    }
+
     async function handlePanelLogin() {
       const email = document.getElementById('loginEmail').value.trim();
       const pw = document.getElementById('loginPassword').value;
@@ -598,8 +648,10 @@
         const data = await r.json();
         if (r.ok && data.token) {
           sessionStorage.setItem('panelToken', data.token);
+          currentUser = {name: data.name, role: data.role, email};
           document.getElementById('loginScreen').classList.add('hidden');
           document.getElementById('appContainer').classList.add('authenticated');
+          applyRole();
           setTimeout(() => { map.invalidateSize(); }, 500);
         } else {
           errEl.textContent = data.error || 'Giriş başarısız'; errEl.style.display = 'block';
@@ -618,8 +670,11 @@
         try {
           const r = await fetch('/api/panel-verify', {headers: {'Authorization': 'Bearer ' + token}});
           if (r.ok) {
+            const data = await r.json();
+            currentUser = {name: data.name, role: data.role, email: ''};
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('appContainer').classList.add('authenticated');
+            applyRole();
             setTimeout(() => { map.invalidateSize(); }, 500);
             return;
           }
@@ -650,9 +705,67 @@
       document.getElementById('sidebar').classList.toggle('open');
     }
     function panelLogout() {
+      fetch('/api/panel-logout', {method: 'POST', headers: authHeaders()}).catch(() => {});
       sessionStorage.removeItem('panelToken');
+      currentUser = {name: '', role: '', email: ''};
       document.getElementById('loginScreen').classList.remove('hidden');
       document.getElementById('appContainer').classList.remove('authenticated');
+    }
+
+    // ========== ADMIN MANAGEMENT ==========
+    function toggleAdminPanel() { document.getElementById('adminPanel').classList.toggle('active'); loadAdmins(); }
+    async function loadAdmins() {
+      const list = document.getElementById('adminList');
+      list.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Yükleniyor...</div>';
+      try {
+        const r = await fetch('/api/panel-admins', {headers: authHeaders()});
+        if (!r.ok) { list.innerHTML = '<div style="color:var(--primary);font-size:12px;text-align:center;padding:20px">Yetkiniz yok</div>'; return; }
+        const admins = await r.json();
+        const roleColors = {superadmin: '#6366F1', admin: '#3B82F6', viewer: '#64748B'};
+        const roleLabels = {superadmin: 'Super Admin', admin: 'Admin', viewer: 'Viewer'};
+        list.innerHTML = admins.map(a => {
+          const isSelf = a.email === currentUser.email || (currentUser.email === '' && a.role === 'superadmin');
+          const lastLogin = a.last_login ? new Date(Number(a.last_login)).toLocaleDateString('tr-TR') : 'Hiç';
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px">${a.name}
+                <span style="font-size:9px;font-weight:700;background:${roleColors[a.role]||'#64748B'}22;color:${roleColors[a.role]||'#64748B'};padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:0.5px">${roleLabels[a.role]||a.role}</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-secondary)">${a.email}</div>
+              <div style="font-size:10px;color:var(--text-secondary)">Son giriş: ${lastLogin}</div>
+            </div>
+            ${!isSelf ? `<div style="display:flex;gap:4px;flex-shrink:0">
+              <button onclick="changeAdminPassword('${a.email}','${a.name}')" style="background:#EFF6FF;border:none;color:#2563EB;padding:6px 8px;border-radius:8px;cursor:pointer" title="Şifre Değiştir"><span class="material-icons" style="font-size:14px">key</span></button>
+              <button onclick="changeAdminRole('${a.email}','${a.name}','${a.role}')" style="background:#F0FDF4;border:none;color:#16A34A;padding:6px 8px;border-radius:8px;cursor:pointer" title="Rol Değiştir"><span class="material-icons" style="font-size:14px">swap_horiz</span></button>
+              <button onclick="deleteAdmin('${a.email}','${a.name}')" style="background:#FEF2F2;border:none;color:#DC2626;padding:6px 8px;border-radius:8px;cursor:pointer" title="Sil"><span class="material-icons" style="font-size:14px">delete</span></button>
+            </div>` : '<div style="font-size:10px;color:var(--text-secondary);font-style:italic">Siz</div>'}
+          </div>`;
+        }).join('');
+      } catch(e) { list.innerHTML = '<div style="color:var(--primary);font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>'; }
+    }
+    async function createAdmin() {
+      const name=document.getElementById('adminName').value.trim(), email=document.getElementById('adminEmail').value.trim(), pw=document.getElementById('adminPassword').value.trim(), role=document.getElementById('adminRole').value;
+      if(!name||!email||!pw){showToast('Tüm alanlar gerekli','error');return}
+      if(pw.length<6){showToast('Şifre en az 6 karakter','error');return}
+      try{const r=await fetch('/api/panel-admins',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({name,email,password:pw,role})});
+      if(r.status===201){showToast(`${name} eklendi!`,'success');['adminName','adminEmail','adminPassword'].forEach(id=>document.getElementById(id).value='');loadAdmins()}
+      else{const d=await r.json();showToast(d.error||'Eklenemedi','error')}}catch(e){showToast('Bağlantı hatası','error')}
+    }
+    async function changeAdminPassword(email,name) {
+      const pw=prompt(`${name} için yeni şifre (min 6 karakter):`);
+      if(!pw||pw.length<6){if(pw!==null)showToast('Şifre en az 6 karakter','error');return}
+      try{const r=await fetch(`/api/panel-admins/${encodeURIComponent(email)}/password`,{method:'PUT',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({password:pw})});if(r.ok)showToast(`${name} şifresi güncellendi`,'success');else showToast('Güncellenemedi','error')}catch(e){showToast('Bağlantı hatası','error')}
+    }
+    async function changeAdminRole(email,name,currentRole) {
+      const roles = ['admin','viewer','superadmin'];
+      const labels = {admin:'Admin',viewer:'Viewer',superadmin:'Super Admin'};
+      const next = roles[(roles.indexOf(currentRole)+1)%roles.length];
+      if(!confirm(`${name} rolünü "${labels[next]}" olarak değiştir?`))return;
+      try{const r=await fetch(`/api/panel-admins/${encodeURIComponent(email)}/role`,{method:'PUT',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({role:next})});if(r.ok){showToast(`${name} → ${labels[next]}`,'success');loadAdmins()}else{const d=await r.json();showToast(d.error||'Değiştirilemedi','error')}}catch(e){showToast('Bağlantı hatası','error')}
+    }
+    async function deleteAdmin(email,name) {
+      if(!confirm(`${name} silinsin mi? Bu işlem geri alınamaz.`))return;
+      try{const r=await fetch(`/api/panel-admins/${encodeURIComponent(email)}`,{method:'DELETE',headers:authHeaders()});if(r.ok){showToast(`${name} silindi`,'success');loadAdmins()}else{const d=await r.json();showToast(d.error||'Silinemedi','error')}}catch(e){showToast('Bağlantı hatası','error')}
     }
     // Show menu button on mobile
     if (window.innerWidth <= 768) {

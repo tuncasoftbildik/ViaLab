@@ -38,34 +38,176 @@ const mailTransporter = nodemailer.createTransport({
   },
 });
 
-// Panel admin kimlik bilgileri
-const PANEL_ADMIN_EMAIL = process.env.PANEL_ADMIN_EMAIL || 'info@viagotransfer.com';
-const PANEL_ADMIN_PASSWORD = process.env.PANEL_ADMIN_PASSWORD || 'Tunca123';
-const panelSessions = new Set();
+// Multi-Admin sistemi — Turso DB
+const panelSessions = new Map(); // token -> {email, role, name}
+
+// Admin tablosu oluştur (yoksa)
+db.execute(`CREATE TABLE IF NOT EXISTS panel_admins (
+  email TEXT PRIMARY KEY,
+  password_hash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin',
+  created_by TEXT,
+  created_at INTEGER,
+  last_login INTEGER
+)`).then(() => {
+  // Süper admin yoksa oluştur
+  const defaultHash = hashPassword('Tunca123');
+  db.execute({
+    sql: `INSERT OR IGNORE INTO panel_admins (email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?)`,
+    args: ['info@viagotransfer.com', defaultHash, 'Tunca', 'superadmin', Date.now()],
+  });
+}).catch(e => console.log('Admin tablo hatası:', e.message));
 
 function generateSessionToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// Session'dan admin bilgisi al
+function getSession(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  return token && panelSessions.has(token) ? panelSessions.get(token) : null;
+}
+
 // Panel login
-app.post('/api/panel-login', (req, res) => {
+app.post('/api/panel-login', async (req, res) => {
   const {email, password} = req.body;
-  if (email === PANEL_ADMIN_EMAIL && password === PANEL_ADMIN_PASSWORD) {
+  if (!email || !password) return res.status(400).json({error: 'Email ve şifre gerekli'});
+
+  try {
+    const result = await db.execute({
+      sql: 'SELECT email, password_hash, name, role FROM panel_admins WHERE email = ?',
+      args: [email],
+    });
+    if (result.rows.length === 0) return res.status(401).json({error: 'Email veya şifre hatalı'});
+
+    const admin = result.rows[0];
+    if (admin.password_hash !== hashPassword(password)) {
+      return res.status(401).json({error: 'Email veya şifre hatalı'});
+    }
+
     const token = generateSessionToken();
-    panelSessions.add(token);
-    res.json({success: true, token});
-  } else {
-    res.status(401).json({error: 'Email veya şifre hatalı'});
+    panelSessions.set(token, {email: admin.email, role: admin.role, name: admin.name});
+
+    // Son giriş zamanını güncelle
+    db.execute({sql: 'UPDATE panel_admins SET last_login = ? WHERE email = ?', args: [Date.now(), email]}).catch(() => {});
+
+    res.json({success: true, token, name: admin.name, role: admin.role});
+  } catch (error) {
+    res.status(500).json({error: error.message});
   }
 });
 
 // Panel session doğrulama
 app.get('/api/panel-verify', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (token && panelSessions.has(token)) {
-    res.json({valid: true});
+  const session = getSession(req);
+  if (session) {
+    res.json({valid: true, name: session.name, role: session.role});
   } else {
     res.status(401).json({valid: false});
+  }
+});
+
+// Panel logout
+app.post('/api/panel-logout', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token) panelSessions.delete(token);
+  res.json({success: true});
+});
+
+// ============================================
+// Admin Yönetimi (sadece superadmin)
+// ============================================
+
+// Admin listesi
+app.get('/api/panel-admins', async (req, res) => {
+  const session = getSession(req);
+  if (!session || session.role !== 'superadmin') return res.status(403).json({error: 'Yetkiniz yok'});
+
+  try {
+    const result = await db.execute('SELECT email, name, role, created_at, last_login FROM panel_admins ORDER BY created_at ASC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Admin ekle
+app.post('/api/panel-admins', async (req, res) => {
+  const session = getSession(req);
+  if (!session || session.role !== 'superadmin') return res.status(403).json({error: 'Yetkiniz yok'});
+
+  const {email, password, name, role} = req.body;
+  if (!email || !password || !name) return res.status(400).json({error: 'Email, şifre ve isim gerekli'});
+  if (password.length < 6) return res.status(400).json({error: 'Şifre en az 6 karakter olmalı'});
+  if (!['admin', 'viewer'].includes(role)) return res.status(400).json({error: 'Geçersiz rol'});
+
+  try {
+    await db.execute({
+      sql: 'INSERT INTO panel_admins (email, password_hash, name, role, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [email, hashPassword(password), name, role, session.email, Date.now()],
+    });
+    res.status(201).json({success: true});
+  } catch (error) {
+    if (error.message?.includes('UNIQUE') || error.message?.includes('PRIMARY')) {
+      return res.status(409).json({error: 'Bu email zaten kayıtlı'});
+    }
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Admin şifre güncelle
+app.put('/api/panel-admins/:email/password', async (req, res) => {
+  const session = getSession(req);
+  if (!session || session.role !== 'superadmin') return res.status(403).json({error: 'Yetkiniz yok'});
+
+  const {password} = req.body;
+  if (!password || password.length < 6) return res.status(400).json({error: 'Şifre en az 6 karakter olmalı'});
+
+  try {
+    const result = await db.execute({sql: 'UPDATE panel_admins SET password_hash = ? WHERE email = ?', args: [hashPassword(password), req.params.email]});
+    if (result.rowsAffected === 0) return res.status(404).json({error: 'Admin bulunamadı'});
+    // Mevcut session'ları temizle
+    for (const [token, s] of panelSessions) { if (s.email === req.params.email) panelSessions.delete(token); }
+    res.json({success: true});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Admin rol güncelle
+app.put('/api/panel-admins/:email/role', async (req, res) => {
+  const session = getSession(req);
+  if (!session || session.role !== 'superadmin') return res.status(403).json({error: 'Yetkiniz yok'});
+  if (req.params.email === session.email) return res.status(400).json({error: 'Kendi rolünüzü değiştiremezsiniz'});
+
+  const {role} = req.body;
+  if (!['admin', 'viewer', 'superadmin'].includes(role)) return res.status(400).json({error: 'Geçersiz rol'});
+
+  try {
+    await db.execute({sql: 'UPDATE panel_admins SET role = ? WHERE email = ?', args: [role, req.params.email]});
+    // Session'daki rolü güncelle
+    for (const [, s] of panelSessions) { if (s.email === req.params.email) s.role = role; }
+    res.json({success: true});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Admin sil
+app.delete('/api/panel-admins/:email', async (req, res) => {
+  const session = getSession(req);
+  if (!session || session.role !== 'superadmin') return res.status(403).json({error: 'Yetkiniz yok'});
+  if (req.params.email === session.email) return res.status(400).json({error: 'Kendinizi silemezsiniz'});
+
+  try {
+    const result = await db.execute({sql: 'DELETE FROM panel_admins WHERE email = ?', args: [req.params.email]});
+    if (result.rowsAffected === 0) return res.status(404).json({error: 'Admin bulunamadı'});
+    // Session'ları temizle
+    for (const [token, s] of panelSessions) { if (s.email === req.params.email) panelSessions.delete(token); }
+    res.json({success: true});
+  } catch (error) {
+    res.status(500).json({error: error.message});
   }
 });
 
