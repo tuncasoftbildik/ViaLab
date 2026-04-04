@@ -38,6 +38,37 @@ const mailTransporter = nodemailer.createTransport({
   },
 });
 
+// Panel admin kimlik bilgileri
+const PANEL_ADMIN_EMAIL = process.env.PANEL_ADMIN_EMAIL || 'info@viagotransfer.com';
+const PANEL_ADMIN_PASSWORD = process.env.PANEL_ADMIN_PASSWORD || 'Tunca123';
+const panelSessions = new Set();
+
+function generateSessionToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Panel login
+app.post('/api/panel-login', (req, res) => {
+  const {email, password} = req.body;
+  if (email === PANEL_ADMIN_EMAIL && password === PANEL_ADMIN_PASSWORD) {
+    const token = generateSessionToken();
+    panelSessions.add(token);
+    res.json({success: true, token});
+  } else {
+    res.status(401).json({error: 'Email veya şifre hatalı'});
+  }
+});
+
+// Panel session doğrulama
+app.get('/api/panel-verify', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token && panelSessions.has(token)) {
+    res.json({valid: true});
+  } else {
+    res.status(401).json({valid: false});
+  }
+});
+
 let accessToken = null;
 let tokenExpiresAt = 0;
 

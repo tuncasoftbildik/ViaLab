@@ -28,8 +28,87 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); height: 100vh; overflow: hidden; }
 
+    /* ========== LOGIN SCREEN ========== */
+    .login-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10000;
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+    .login-screen.hidden { opacity: 0; pointer-events: none; transform: scale(1.02); }
+    .login-card {
+      width: 380px; max-width: calc(100vw - 40px);
+      background: #fff; border-radius: 20px;
+      box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+      overflow: hidden;
+      animation: loginSlideUp 0.5s ease;
+    }
+    @keyframes loginSlideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .login-header {
+      background: linear-gradient(135deg, #E53935, #C62828);
+      padding: 32px 32px 28px; text-align: center;
+    }
+    .login-logo { width: 160px; margin-bottom: 8px; filter: brightness(0) invert(1); }
+    .login-badge {
+      display: inline-block; background: rgba(255,255,255,0.2);
+      color: #fff; font-size: 11px; font-weight: 800;
+      letter-spacing: 3px; padding: 4px 16px; border-radius: 20px;
+    }
+    .login-form { padding: 32px; }
+    .login-title {
+      font-size: 20px; font-weight: 800; color: #0F172A;
+      margin-bottom: 4px; text-align: center;
+    }
+    .login-subtitle {
+      font-size: 13px; color: #64748B; text-align: center; margin-bottom: 24px;
+    }
+    .login-field {
+      position: relative; margin-bottom: 14px;
+    }
+    .login-field .material-icons {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      color: #94A3B8; font-size: 20px;
+    }
+    .login-field input {
+      width: 100%; padding: 14px 14px 14px 44px;
+      border: 2px solid #E2E8F0; border-radius: 12px;
+      font-size: 14px; font-family: inherit; color: #0F172A;
+      background: #F8FAFC; transition: all 0.2s;
+      outline: none;
+    }
+    .login-field input:focus {
+      border-color: #E53935; background: #fff;
+      box-shadow: 0 0 0 3px rgba(229,57,53,0.1);
+    }
+    .login-field input::placeholder { color: #94A3B8; }
+    .login-btn {
+      width: 100%; padding: 14px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #E53935, #C62828);
+      color: #fff; font-size: 15px; font-weight: 700;
+      font-family: inherit; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s; margin-top: 8px;
+    }
+    .login-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(229,57,53,0.4); }
+    .login-btn:active { transform: translateY(0); }
+    .login-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .login-error {
+      background: #FEF2F2; color: #DC2626; font-size: 12px; font-weight: 600;
+      padding: 10px 14px; border-radius: 8px; margin-bottom: 14px;
+      display: none; text-align: center;
+    }
+    .login-footer {
+      text-align: center; padding: 0 32px 24px;
+      font-size: 11px; color: #94A3B8;
+    }
+
     /* ========== LAYOUT ========== */
-    .app { display: flex; height: 100vh; }
+    .app { display: flex; height: 100vh; visibility: hidden; }
+    .app.authenticated { visibility: visible; }
     .sidebar {
       width: var(--sidebar-w); background: var(--surface);
       display: flex; flex-direction: column;
@@ -312,7 +391,35 @@
   </style>
 </head>
 <body>
-  <div class="app">
+  <!-- LOGIN SCREEN -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-header">
+        <img src="/logo.png" alt="ViaGo" class="login-logo">
+        <div class="login-badge">ADMIN PANEL</div>
+      </div>
+      <div class="login-form">
+        <div class="login-title">Yönetim Paneli</div>
+        <div class="login-subtitle">Devam etmek için giriş yapın</div>
+        <div class="login-error" id="loginError"></div>
+        <div class="login-field">
+          <span class="material-icons">email</span>
+          <input type="email" id="loginEmail" placeholder="Email adresi" autocomplete="email">
+        </div>
+        <div class="login-field">
+          <span class="material-icons">lock</span>
+          <input type="password" id="loginPassword" placeholder="Şifre" autocomplete="current-password">
+        </div>
+        <button class="login-btn" id="loginBtn" onclick="handlePanelLogin()">
+          <span>Giriş Yap</span>
+          <span class="material-icons" style="font-size:18px">arrow_forward</span>
+        </button>
+      </div>
+      <div class="login-footer">Booking.com Taxi Supplier</div>
+    </div>
+  </div>
+
+  <div class="app" id="appContainer">
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
       <div class="header">
@@ -320,9 +427,14 @@
           <div class="header-logo">Via<em>Go</em></div>
           <div class="header-badge">PANEL</div>
         </div>
-        <button class="mobile-menu-btn" onclick="toggleSidebar()">
-          <span class="material-icons">close</span>
-        </button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="panelLogout()" style="background:rgba(255,255,255,0.1);border:none;color:rgba(255,255,255,0.7);padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;font-family:inherit" title="Çıkış Yap">
+            <span class="material-icons" style="font-size:16px">logout</span>
+          </button>
+          <button class="mobile-menu-btn" onclick="toggleSidebar()">
+            <span class="material-icons">close</span>
+          </button>
+        </div>
       </div>
 
       <div class="stats-bar">
@@ -473,6 +585,49 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // ========== AUTH ==========
+    async function handlePanelLogin() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const pw = document.getElementById('loginPassword').value;
+      const errEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginBtn');
+      if (!email || !pw) { errEl.textContent = 'Email ve şifre gerekli'; errEl.style.display = 'block'; return; }
+      btn.disabled = true; btn.innerHTML = '<span>Giriş yapılıyor...</span>';
+      try {
+        const r = await fetch('/api/panel-login', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({email, password: pw})});
+        const data = await r.json();
+        if (r.ok && data.token) {
+          sessionStorage.setItem('panelToken', data.token);
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('appContainer').classList.add('authenticated');
+          setTimeout(() => { map.invalidateSize(); }, 500);
+        } else {
+          errEl.textContent = data.error || 'Giriş başarısız'; errEl.style.display = 'block';
+        }
+      } catch(e) { errEl.textContent = 'Sunucuya bağlanılamadı'; errEl.style.display = 'block'; }
+      btn.disabled = false; btn.innerHTML = '<span>Giriş Yap</span><span class="material-icons" style="font-size:18px">arrow_forward</span>';
+    }
+    // Enter tuşu ile giriş
+    document.getElementById('loginPassword').addEventListener('keydown', e => { if(e.key==='Enter') handlePanelLogin(); });
+    document.getElementById('loginEmail').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginPassword').focus(); });
+
+    // Sayfa yüklendiğinde session kontrol
+    (async function checkSession() {
+      const token = sessionStorage.getItem('panelToken');
+      if (token) {
+        try {
+          const r = await fetch('/api/panel-verify', {headers: {'Authorization': 'Bearer ' + token}});
+          if (r.ok) {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('appContainer').classList.add('authenticated');
+            setTimeout(() => { map.invalidateSize(); }, 500);
+            return;
+          }
+        } catch(e) {}
+        sessionStorage.removeItem('panelToken');
+      }
+    })();
+
     // ========== MAP ==========
     const map = L.map('map').setView([41.0082, 28.9784], 11);
     L.gridLayer.googleMutant({ type: 'roadmap' }).addTo(map);
@@ -493,6 +648,11 @@
     // ========== RESPONSIVE ==========
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('open');
+    }
+    function panelLogout() {
+      sessionStorage.removeItem('panelToken');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('appContainer').classList.remove('authenticated');
     }
     // Show menu button on mobile
     if (window.innerWidth <= 768) {
