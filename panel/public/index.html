@@ -87,6 +87,50 @@
     .driver-status.offline { background: #f5f5f5; color: #999; }
     .driver-time { font-size: 11px; color: #bbb; }
 
+    /* Driver History Panel */
+    .history-panel {
+      border-top: 2px solid #E53935;
+      background: #fafafa;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .history-panel.open { max-height: 50vh; overflow-y: auto; }
+    .history-header {
+      padding: 12px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      background: #fff; position: sticky; top: 0; z-index: 1;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .history-header h4 { font-size: 14px; font-weight: 700; color: #1a1a2e; margin: 0; }
+    .history-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 20px; color: #999; line-height: 1;
+    }
+    .history-close:hover { color: #E53935; }
+    .history-item {
+      padding: 10px 16px; border-bottom: 1px solid #f0f0f0;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .history-item:hover { background: #f5f5f5; }
+    .history-date {
+      min-width: 52px; text-align: center;
+      background: #fff; border-radius: 8px; padding: 4px 6px;
+      border: 1px solid #e0e0e0;
+    }
+    .history-date .day { font-size: 16px; font-weight: 800; color: #1a1a2e; line-height: 1.2; }
+    .history-date .month { font-size: 10px; color: #999; font-weight: 600; }
+    .history-date .time { font-size: 11px; color: #E53935; font-weight: 700; }
+    .history-route { flex: 1; min-width: 0; }
+    .history-route .from, .history-route .to {
+      font-size: 12px; color: #333; display: flex; align-items: center; gap: 4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .history-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 6px;
+      border-radius: 6px; color: #fff; white-space: nowrap;
+    }
+
     /* Map */
     #map { flex: 1; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
 
@@ -200,6 +244,13 @@
       </div>
       <input type="text" class="search-box" placeholder="Sürücü ara..." id="searchInput" oninput="filterDrivers()">
       <div class="driver-list" id="driverList"></div>
+      <div class="history-panel" id="historyPanel">
+        <div class="history-header">
+          <h4 id="historyTitle">Sürücü Geçmişi</h4>
+          <button class="history-close" onclick="closeHistory()">&times;</button>
+        </div>
+        <div id="historyList"></div>
+      </div>
     </div>
 
     <!-- Main Content -->
@@ -496,8 +547,77 @@
         map.setView([d.latitude, d.longitude], 15);
         const marker = driverMarkers.get(driverId);
         if (marker) marker.openPopup();
+        loadDriverHistory(d);
       }
       updateDriverList();
+    }
+
+    function closeHistory() {
+      document.getElementById('historyPanel').classList.remove('open');
+    }
+
+    async function loadDriverHistory(driver) {
+      const panel = document.getElementById('historyPanel');
+      const list = document.getElementById('historyList');
+      const title = document.getElementById('historyTitle');
+
+      title.textContent = `${driver.firstName} ${driver.lastName} — Geçmiş`;
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">Yükleniyor...</div>';
+      panel.classList.add('open');
+
+      try {
+        const res = await fetch('/api/driver-history/' + encodeURIComponent(driver.phone));
+        const bookings = await res.json();
+
+        if (bookings.length === 0) {
+          list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:12px">Kayıtlı transfer yok</div>';
+          return;
+        }
+
+        const statusMap = {
+          NEW: {label: 'Yeni', color: '#FF9800'},
+          ACCEPTED: {label: 'Kabul', color: '#1E88E5'},
+          DRIVER_ASSIGNED: {label: 'Atandı', color: '#43A047'},
+          COMPLETED: {label: 'Tamamlandı', color: '#2E7D32'},
+          CANCELLED: {label: 'İptal', color: '#E53935'},
+          NO_SHOW: {label: 'Gelmedi', color: '#9E9E9E'},
+        };
+        const months = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+
+        list.innerHTML = bookings.map(b => {
+          const dt = b.pickup_date_time?.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+          const day = dt ? dt[3] : '--';
+          const month = dt ? months[parseInt(dt[2], 10) - 1] : '--';
+          const time = dt ? `${dt[4]}:${dt[5]}` : '--:--';
+          const st = statusMap[b.status] || {label: b.status, color: '#999'};
+          const pickup = b.pickup?.establishment_name || b.pickup?.address || '-';
+          const dropoff = b.dropoff?.establishment_name || b.dropoff?.address || '-';
+          const pax = b.passenger?.name || '';
+          const paxCount = b.passenger_count || 1;
+          const isAirport = b.pickup?.type === 'AIRPORT' || b.dropoff?.type === 'AIRPORT';
+
+          return `
+            <div class="history-item">
+              <div class="history-date">
+                <div class="day">${day}</div>
+                <div class="month">${month}</div>
+                <div class="time">${time}</div>
+              </div>
+              <div class="history-route">
+                <div class="from"><span class="material-icons" style="font-size:13px;color:#43A047">trip_origin</span> ${pickup}</div>
+                <div class="to"><span class="material-icons" style="font-size:13px;color:#E53935">place</span> ${dropoff}</div>
+                <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
+                  <span class="history-badge" style="background:${st.color}">${st.label}</span>
+                  <span style="font-size:10px;color:#999">${pax} · ${paxCount} kişi</span>
+                  ${isAirport ? '<span class="material-icons" style="font-size:12px;color:#1E88E5">flight</span>' : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:#E53935;font-size:12px">Yüklenemedi</div>';
+      }
     }
 
     function selectDriver(driverId) {

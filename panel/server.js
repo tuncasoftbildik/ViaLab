@@ -164,6 +164,34 @@ app.get('/api/bookings', async (req, res) => {
   }
 });
 
+// Sürücü geçmişi — telefon numarasına göre tüm booking'leri getir
+app.get('/api/driver-history/:phone', async (req, res) => {
+  try {
+    const token = await getToken();
+    const phone = req.params.phone;
+    const statuses = 'NEW,ACCEPTED,DRIVER_ASSIGNED,COMPLETED,CANCELLED,NO_SHOW';
+    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/bookings?status=${statuses}&size=500`, {
+      headers: {Authorization: token},
+    });
+    const data = await apiRes.json();
+    const bookings = data?.bookings || data || [];
+
+    // Sürücüye atanmış olanları filtrele
+    const driverBookings = bookings.filter(b =>
+      b.driver_assigned?.telephone_number === phone
+    );
+
+    // Tarihe göre sırala (en yeni önce)
+    driverBookings.sort((a, b) =>
+      new Date(b.pickup_date_time).getTime() - new Date(a.pickup_date_time).getTime()
+    );
+
+    res.json(driverBookings);
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
+
 // ============================================
 // Sürücü Yönetimi (Booking.com API)
 // ============================================
