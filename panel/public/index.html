@@ -610,30 +610,18 @@
           list.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Kayıtlı sürücü yok</div>';
           return;
         }
-        list.innerHTML = drivers.map(d => {
-          const isActive = d.status === 'ACTIVE' || d.status === 'ACTIVATED';
-          const isPending = !isActive;
-          const statusBadge = isActive
-            ? '<span style="font-size:10px;background:#E8F5E9;color:#2E7D32;padding:2px 6px;border-radius:6px;font-weight:600">Aktif</span>'
-            : '<span style="font-size:10px;background:#FFF3E0;color:#E65100;padding:2px 6px;border-radius:6px;font-weight:600">Aktivasyon Bekliyor</span>';
-          return `
+        list.innerHTML = drivers.map(d => `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5">
             <div>
-              <div style="font-size:13px;font-weight:600;color:#333">${d.first_name} ${d.last_name} ${statusBadge}</div>
+              <div style="font-size:13px;font-weight:600;color:#333">${d.first_name} ${d.last_name}</div>
               <div style="font-size:11px;color:#999">${d.telephone_number}</div>
             </div>
-            <div style="display:flex;gap:6px">
-              ${isPending ? `<button onclick="activateDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
-                style="background:#E8F5E9;border:none;color:#2E7D32;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
-                <span class="material-icons" style="font-size:14px">send</span> SMS Gönder
-              </button>` : ''}
-              <button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
-                style="background:#FFEBEE;border:none;color:#E53935;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
-                <span class="material-icons" style="font-size:14px">delete</span> Sil
-              </button>
-            </div>
-          </div>`;
-        }).join('');
+            <button onclick="deleteBookingDriver('${d.driver_id}','${d.first_name} ${d.last_name}')"
+              style="background:#FFEBEE;border:none;color:#E53935;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px">
+              <span class="material-icons" style="font-size:14px">delete</span> Sil
+            </button>
+          </div>
+        `).join('');
       } catch (err) {
         list.innerHTML = '<div style="color:#E53935;font-size:12px;text-align:center;padding:20px">Yüklenemedi</div>';
       }
@@ -666,20 +654,6 @@
         } else {
           const data = await res.json();
           showToast(data.error || 'Eklenemedi', 'error');
-        }
-      } catch (err) {
-        showToast('Bağlantı hatası', 'error');
-      }
-    }
-
-    async function activateDriver(driverId, name) {
-      try {
-        const res = await fetch(`/api/booking-drivers/${driverId}/activation`, {method: 'POST'});
-        if (res.ok) {
-          showToast(`${name} için aktivasyon SMS'i gönderildi`, 'success');
-        } else {
-          const data = await res.json().catch(() => ({}));
-          showToast(data.error || 'SMS gönderilemedi', 'error');
         }
       } catch (err) {
         showToast('Bağlantı hatası', 'error');

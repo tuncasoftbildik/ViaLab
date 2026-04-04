@@ -218,26 +218,6 @@ app.post('/api/booking-drivers', async (req, res) => {
   }
 });
 
-// Sürücü aktivasyon linki gönder
-app.post('/api/booking-drivers/:driverId/activation', async (req, res) => {
-  try {
-    const token = await getToken();
-    const apiRes = await fetch(`${BOOKING_API_BASE}/v1/drivers/${req.params.driverId}/activation`, {
-      method: 'POST',
-      headers: {Authorization: token},
-    });
-
-    if (apiRes.status === 200) {
-      res.json({success: true});
-    } else {
-      const data = await apiRes.json().catch(() => ({}));
-      res.status(apiRes.status).json(data);
-    }
-  } catch (error) {
-    res.status(500).json({error: error.message});
-  }
-});
-
 // Sürücü sil
 app.delete('/api/booking-drivers/:driverId', async (req, res) => {
   try {
